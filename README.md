@@ -1,34 +1,32 @@
 # copier
 
-A zero-dependency, reflection-based deep copy library for Go. It copies values across
-structs, maps, slices, arrays and pointers — in any direction:
+A zero-dependency, reflection-based deep copy library for Go.
 
-- struct → struct
-- struct → map / map → struct
-- map → map (with deep copy isolation)
-- slice / array / pointer deep copy
-
-```go
+```bash
 go get github.com/charlienet/copier
 ```
 
-## Why this library?
+## Features
 
-`copier` shares its name and core ideas with [jinzhu/copier](https://github.com/jinzhu/copier)
-but diverges in several practical ways:
-
-| Feature | copier | jinzhu/copier |
-|---|---|---|
-| struct ↔ map bidirectional copy | ✅ native | ❌ not supported |
-| Case-insensitive field matching by default | ✅ | ❌ |
-| `WithMaxDepth` recursion limit | ✅ | ❌ |
-| `TypeConverter` triple match (FieldName + SrcType + DstType) | ✅ | field name only |
-| Combined tag syntax `copier:"must,toname=x"` | ✅ | limited |
-| Pointer cycle detection (self/mutual references) | ✅ | ❌ |
-| Reflection plan cache (default struct→struct ~2.5x faster) | ✅ | ❌ |
-| Method → field mapping (`WithMethodMapping`) | ✅ | ❌ |
-
-The library is **zero-dependency** (standard library only) and safe for concurrent use.
+- **Copy in any direction**: struct ↔ struct, struct ↔ map, map ↔ map, plus slice /
+  array / pointer deep copy — all with deep copy isolation (mutating the destination
+  never pollutes the source).
+- **Case-insensitive field matching by default**, switchable to sensitive with
+  `WithCaseSensitive`.
+- **Struct tags**: `copier:"-"` (skip), `copier:"must"` (only with `WithMust`),
+  `copier:"toname=x"` (rename target), combinable — and the tag name itself is
+  configurable via `WithTagName`.
+- **Recursion depth limit** with `WithMaxDepth`.
+- **TypeConverter triple match** (field name + source type + destination type) for
+  custom conversions.
+- **Pointer cycle detection**: self- and mutual references terminate safely without
+  stack overflow.
+- **Reflection plan cache**: default-configuration struct→struct copying is roughly
+  2.5x faster than a naive per-field reflection scan (struct→map and map→struct are
+  cached too).
+- **Method → field mapping** (`WithMethodMapping`): source getters and destination
+  setters participate in copying.
+- **Zero third-party dependencies** (standard library only), safe for concurrent use.
 
 ## Quick start
 
@@ -164,40 +162,30 @@ errors.Is(err, copier.ErrInvalidCopyDestination) // true
 ## Performance
 
 Same-type struct → struct (10 mixed-type fields), deep copy with per-iteration fresh
-destination. Measured with the dedicated comparison module `copier/bench`:
+destination:
 
 ```
-go test -run '^$' -bench . -benchmem -count=3   # from copier/bench
+~1268 ns/op · 1024 B/op · 18 allocs/op
 ```
-
-| Library | ns/op | B/op | allocs/op |
-|---|---|---|---|
-| **copier** (this library) | **~1268** | 1024 | 18 |
-| jinzhu/copier (shallow) | ~4609 | 928 | 30 |
-| jinzhu/copier `DeepCopy:true` | ~6134 | 1984 | 52 |
-| tiendc/go-deepcopy | ~610 | 712 | 9 |
 
 The default-configuration struct→struct path uses a precomputed reflection plan cache,
-which is roughly **2.5x faster** than the naive reflection field scan (measured ~2988 →
+which is roughly **2.5x faster** than a naive per-field reflection scan (measured ~2988 →
 ~1219 ns/op on the same workload). struct→map and map→struct are cached too.
+Three-way comparison benchmarks against other copy libraries live in `bench/`.
 
 ## Testing & benchmarking
 
 ```bash
 go test ./...          # unit + audit + fuzz seeds + example tests
-cd copier/bench
-go test -run '^$' -bench . -benchmem -count=3   # comparison vs jinzhu / tiendc
+cd bench
+go test -run '^$' -bench . -benchmem -count=3
 ```
-
-## Acknowledgements
-
-Parts of the design and implementation are inspired by:
-
-- [github.com/jinzhu/copier](https://github.com/jinzhu/copier) (MIT License): tag parsing
-  model, method → field mapping concept
-- [github.com/tiendc/go-deepcopy](https://github.com/tiendc/go-deepcopy) (MIT License):
-  build-and-cache plan approach for reflection caching
 
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 charlienet
+
+Part of the design is inspired by [github.com/jinzhu/copier](https://github.com/jinzhu/copier)
+(MIT License, tag parsing model and method → field mapping concept) and
+[github.com/tiendc/go-deepcopy](https://github.com/tiendc/go-deepcopy) (MIT License,
+build-and-cache plan approach for reflection caching).
