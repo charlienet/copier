@@ -22,7 +22,13 @@ type options struct {
 	methodMapping    bool                  // 启用方法→字段映射（默认关闭）
 }
 
-type option func(*options)
+// Option 复制选项函数（函数式选项模式）。
+// 导出后外部封装可声明 ...copier.Option 形参并透传 With* 选项。
+// 注：参数类型 *options 未导出，外部无法自行构造选项，只能使用 With* 工厂。
+type Option = func(*options)
+
+// option 内部别名，保持既有代码与签名不变。
+type option = Option
 
 type TypeConverter struct {
 	FieldName string
