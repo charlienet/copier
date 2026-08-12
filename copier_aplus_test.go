@@ -363,11 +363,11 @@ func TestAuditAplusMapValueEdges(t *testing.T) {
 	})
 
 	t.Run("incompatible value type skipped silently", func(t *testing.T) {
-		// string value 不可 ConvertibleTo int → 跳过该 key，不报错不 panic
+		// string value 不可 ConvertibleTo int → 跳过该 key，不报错不 panic（宽松语义）
 		from := map[string]string{"a": "1"}
 		to := map[string]int{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(&to, from, WithLenient()))
 		assert.Equal(t, 0, to["a"]) // to 保持空
 	})
 }
@@ -778,7 +778,7 @@ func TestAuditAplusParseFailures(t *testing.T) {
 
 		src := srcT{B: "notabool"}
 		dst := dstT{B: true}
-		assert.NoError(t, Copy(&dst, src))
-		assert.Equal(t, true, dst.B) // ParseBool 失败，保持原值
+		assert.NoError(t, Copy(&dst, src, WithLenient()))
+		assert.Equal(t, true, dst.B) // ParseBool 失败，保持原值（宽松语义）
 	})
 }

@@ -20,7 +20,8 @@ type options struct {
 	skipFields       []string              // 跳过的字段列表
 	valueConverter   func(string, any) any // 值转换函数
 	methodMapping    bool                  // 启用方法→字段映射（默认关闭）
-	strict           bool                  // 严格模式：转换失败报错而非静默留零/跳过（默认关闭）
+	strict           bool                  // 严格模式：转换失败报错而非静默留零/跳过（v0.2 起默认开启）
+	nilSrcZero       bool                  // nil 源视为零值目标（默认关闭，nil 源报错）
 }
 
 // Option 复制选项函数（函数式选项模式）。
@@ -190,7 +191,7 @@ func WithMethodMapping() option {
 }
 
 // WithStrict 启用严格模式：strconv 解析失败或值类型不兼容时返回
-// ErrConversionFailed 哨兵错误，而非静默跳过/留零值。默认关闭。
+// ErrConversionFailed 哨兵错误，而非静默跳过/留零值。v0.2 起默认开启。
 // 注：strict 不影响字段匹配 plan（与 ignoreEmpty 同类，运行时判断）。
 func WithStrict() option {
 	return func(o *options) {
@@ -198,7 +199,24 @@ func WithStrict() option {
 	}
 }
 
+// WithLenient 显式退出严格模式：转换失败恢复静默跳过/留零值语义。
+// 与 WithStrict 相对，用于局部恢复 v0.1 的宽松行为。
+func WithLenient() option {
+	return func(o *options) {
+		o.strict = false
+	}
+}
+
+// WithNilSrcZero 将 nil 源视为零值目标：Copy(&dst, nil) 时把 dst 置零并返回 nil，
+// 而非 ErrInvalidCopyFrom。默认关闭（nil 源报错）。与 strict 正交，不受其影响。
+func WithNilSrcZero() option {
+	return func(o *options) {
+		o.nilSrcZero = true
+	}
+}
+
 var DefaultOptions = &options{
 	maxDepth: noDepthLimited,
 	tagName:  defaultTag,
+	strict:   true, // v0.2 起默认严格模式
 }

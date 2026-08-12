@@ -131,3 +131,38 @@ func BenchmarkCopyMapToStruct(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkCopyStructStrict struct→struct 开启 WithStrict（strict 不进 plan 键，
+// 仍走 plan 缓存路径，运行时叠加精度检查）。对比 BenchmarkCopyStruct 确认无退化。
+func BenchmarkCopyStructStrict(b *testing.B) {
+	src := benchMedium{
+		Name: "John", Age: 30, Height: 1.75, Active: true,
+		Tags: []string{"a", "b"}, Meta: map[string]string{"k": "v"},
+		City: "Beijing", Score: 100, Level: 3, Created: time.Now(),
+	}
+	var dst benchMedium
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := Copy(&dst, src, WithStrict()); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkCopyStructWithPlanCache struct→struct 默认选项（plan 缓存稳态，显式命名对照）。
+func BenchmarkCopyStructWithPlanCache(b *testing.B) {
+	src := benchMedium{
+		Name: "John", Age: 30, Height: 1.75, Active: true,
+		Tags: []string{"a", "b"}, Meta: map[string]string{"k": "v"},
+		City: "Beijing", Score: 100, Level: 3, Created: time.Now(),
+	}
+	var dst benchMedium
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := Copy(&dst, src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

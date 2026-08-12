@@ -295,7 +295,7 @@ func TestAuditM4TypeConvertMissing(t *testing.T) {
 		src := fsrc{N: 3.7}
 		var dst fdst
 
-		err := Copy(&dst, src)
+		err := Copy(&dst, src, WithLenient())
 		assert.NoError(t, err)
 		assert.Equal(t, 3, dst.N)
 	})

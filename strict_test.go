@@ -16,15 +16,32 @@ type strictDst struct {
 	Num int
 }
 
-// ============ 默认模式（宽松）：解析失败静默留零，不报错 ============
+// ============ v0.2 起默认严格模式 ============
+
+func TestStrictDefaultOn(t *testing.T) {
+	// 无选项时解析失败默认报错（默认翻转验证）
+	src := strictSrc{Num: "abc"}
+	var dst strictDst
+
+	err := Copy(&dst, src)
+	assert.True(t, errors.Is(err, ErrConversionFailed))
+
+	// WithLenient 显式退出严格模式
+	dst = strictDst{}
+	err = Copy(&dst, src, WithLenient())
+	assert.NoError(t, err)
+	assert.Equal(t, 0, dst.Num)
+}
+
+// ============ 宽松模式（WithLenient）：解析失败静默留零，不报错 ============
 
 func TestStrictDefaultLenient(t *testing.T) {
 	src := strictSrc{Num: "abc"}
 	var dst strictDst
 
-	err := Copy(&dst, src)
+	err := Copy(&dst, src, WithLenient())
 	assert.NoError(t, err)
-	assert.Equal(t, 0, dst.Num) // 解析失败留零值
+	assert.Equal(t, 0, dst.Num) // 解析失败留零值（宽松语义）
 }
 
 // ============ WithStrict + 合法值：正常转换 ============
@@ -83,12 +100,12 @@ func TestStrictMapValueIncompatible(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrConversionFailed))
 	})
 
-	t.Run("default silently skips key", func(t *testing.T) {
+	t.Run("lenient silently skips key", func(t *testing.T) {
 		var dst map[string]string
-		err := Copy(&dst, src)
+		err := Copy(&dst, src, WithLenient())
 		assert.NoError(t, err)
 		_, hasKey := dst["a"]
-		assert.False(t, hasKey) // 不兼容值静默 continue，dst 缺该 key
+		assert.False(t, hasKey) // 不兼容值静默 continue，dst 缺该 key（宽松语义）
 	})
 }
 

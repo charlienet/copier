@@ -93,12 +93,35 @@ func Copy(dst, src any, opts ...option) error {
 }
 
 func copier(dst, src any, opt *options) error {
+	// 顶层 dst 为 nil 指针链时自动分配（对齐 deepCopyInner Pointer 分支自动 New 语义）：
+	// Copy(&p, src)（&p 非 nil、p 为 nil *T）先分配指针链使目标可寻址，不再报
+	// ErrInvalidCopyDestination。注：nil 指针本身作为 any 传入（如 Copy(p, src)，
+	// p 为 nil *T）时反射层不可设置，无法分配，维持原 ErrInvalidCopyDestination 行为。
+	dstVal := reflect.ValueOf(dst)
+	for dstVal.Kind() == reflect.Pointer && !dstVal.IsNil() {
+		next := dstVal.Elem()
+		if next.Kind() != reflect.Pointer {
+			break
+		}
+		if next.IsNil() && next.CanSet() {
+			next.Set(reflect.New(next.Type().Elem()))
+		}
+		dstVal = next
+	}
+
 	var (
 		to   = indirect(reflect.ValueOf(dst))
 		from = indirect(reflect.ValueOf(src))
 	)
 
 	if !from.IsValid() {
+		if opt.nilSrcZero {
+			// nil 源视为零值目标：dst 置零后返回（顶层分配已保证 to 有效；不可写则静默）
+			if to.CanSet() {
+				to.Set(reflect.Zero(to.Type()))
+			}
+			return nil
+		}
 		return ErrInvalidCopyFrom
 	}
 
@@ -287,7 +310,7 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 
 			if sf.Anonymous && sf.Type.Kind() == reflect.Struct {
 				if err := deepCopyInner(dst, src.Field(i), depth+1, opt, visited); err != nil {
-					return err
+					return fmt.Errorf("%s: %w", sf.Name, err)
 				}
 
 				continue
@@ -313,14 +336,14 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			if !converted && value.Kind() == reflect.Struct {
 				newDst := reflect.ValueOf(make(map[string]any, src.Field(i).NumField()))
 				if err := deepCopyInner(newDst, value, depth+1, opt, visited); err != nil {
-					return err
+					return fmt.Errorf("%s: %w", name, err)
 				}
 
 				dst.SetMapIndex(reflect.ValueOf(name), newDst)
 			} else if !converted && isContainerKind(value.Kind()) {
 				copied, err := copyContainer(value, depth, opt, visited)
 				if err != nil {
-					return err
+					return fmt.Errorf("%s: %w", name, err)
 				}
 
 				dst.SetMapIndex(reflect.ValueOf(name), copied)
@@ -379,7 +402,7 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 				}
 
 				if err := deepCopyInner(tv, v, depth+1, opt, visited); err != nil {
-					return err
+					return fmt.Errorf("%s: %w", name, err)
 				}
 			}
 			return nil
@@ -508,6 +531,11 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 		// 交由下方 String/Int/Uint/Float 分支用 strconv 做十进制转换
 		if src.Type().AssignableTo(dst.Type()) ||
 			(!isNumericStringCross(src.Type(), dst.Type()) && src.Type().ConvertibleTo(dst.Type())) {
+			// 严格模式：数值转换精度丢失检测（float→int 截断/溢出、float64→float32 舍入、
+			// int→float 超精确范围），默认宽松模式零变化
+			if opt.strict && !losslessNumericConversion(src, dst) {
+				return fmt.Errorf("%w: precision loss converting %v(%v) to %v", ErrConversionFailed, src.Type(), src.Interface(), dst.Type())
+			}
 			dst.Set(src.Convert(dst.Type()))
 			return nil
 		}
@@ -697,7 +725,7 @@ func cpyStruct(dst, src reflect.Value, depth int, opt *options, visited map[uint
 		}
 
 		if err := deepCopyInner(dstValue, sField, depth+1, opt, visited); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", sf.Name, err)
 		}
 	}
 
@@ -766,7 +794,7 @@ func cpyStructByPlan(dst, src reflect.Value, plan *structPlan, depth int, opt *o
 		}
 
 		if err := deepCopyInner(dstValue, sField, depth+1, opt, visited); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", m.srcName, err)
 		}
 	}
 
@@ -790,7 +818,7 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 		if e.expand {
 			// 匿名 struct 字段：递归展开
 			if err := deepCopyInner(dst, src.Field(e.srcIdx), depth+1, opt, visited); err != nil {
-				return err
+				return fmt.Errorf("%s: %w", e.srcName, err)
 			}
 			continue
 		}
@@ -815,14 +843,14 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 		if !converted && value.Kind() == reflect.Struct {
 			newDst := reflect.ValueOf(make(map[string]any, srcField.NumField()))
 			if err := deepCopyInner(newDst, value, depth+1, opt, visited); err != nil {
-				return err
+				return fmt.Errorf("%s: %w", e.srcName, err)
 			}
 
 			dst.SetMapIndex(reflect.ValueOf(e.name), newDst)
 		} else if !converted && isContainerKind(value.Kind()) {
 			copied, err := copyContainer(value, depth, opt, visited)
 			if err != nil {
-				return err
+				return fmt.Errorf("%s: %w", e.srcName, err)
 			}
 
 			dst.SetMapIndex(reflect.ValueOf(e.name), copied)
@@ -889,7 +917,7 @@ func cpyMapToStruct(dst, src reflect.Value, plan *mapToStructPlan, depth int, op
 		}
 
 		if err := deepCopyInner(tv, v, depth+1, opt, visited); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
 
@@ -1021,6 +1049,32 @@ func isNumericKind(k reflect.Kind) bool {
 func isNumericStringCross(src, dst reflect.Type) bool {
 	return (isNumericKind(src.Kind()) && dst.Kind() == reflect.String) ||
 		(src.Kind() == reflect.String && isNumericKind(dst.Kind()))
+}
+
+// losslessNumericConversion 判断 src→dst 数值转换是否无损（严格模式精度检查）。
+// 用"转换到目标再转回原类型"的往返比较检测：
+//   - float→int：小数部分截断或溢出（往返不一致）→ 有损
+//   - float64→float32：舍入损失 → 有损；float32→float64 恒无损
+//   - int→float：超出浮点精确表示范围（往返不一致）→ 有损
+//
+// 整数→整数不做检查（任务范围外）；同类别数值（srcKind==dstKind）恒无损。
+func losslessNumericConversion(src, dst reflect.Value) bool {
+	srcKind, dstKind := src.Kind(), dst.Kind()
+	if srcKind == dstKind {
+		return true
+	}
+
+	srcFloat := srcKind == reflect.Float32 || srcKind == reflect.Float64
+	dstFloat := dstKind == reflect.Float32 || dstKind == reflect.Float64
+
+	// 整数→整数：范围外，不检测
+	if !srcFloat && !dstFloat {
+		return true
+	}
+
+	// 涉及 float 的数值转换：往返比较
+	roundtrip := src.Convert(dst.Type()).Convert(src.Type())
+	return src.Interface() == roundtrip.Interface()
 }
 
 func indirect(reflectValue reflect.Value) reflect.Value {
