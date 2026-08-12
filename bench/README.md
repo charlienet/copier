@@ -1,9 +1,9 @@
 # copier/bench — 本地 copier vs 主流库性能对比
 
-本目录是**独立**的 Go 模块，用于将本地 `github.com/charlienet/go-misc/copier`
+本目录是**独立**的 Go 模块，用于将本地 `github.com/charlienet/copier`
 与主流拷贝库做性能对比。主模块保持零依赖，本目录通过 `replace` 指令引用本地路径：
 
-- 本地：`github.com/charlienet/go-misc/copier`（`Copy(&dst, &src)`，深拷贝）
+- 本地：`github.com/charlienet/copier`（`Copy(&dst, &src)`，深拷贝）
 - [jinzhu/copier](https://github.com/jinzhu/copier) v0.4.0（`Copy(&dst, &src)` 默认浅拷贝；
   深拷贝用 `CopyWithOption(&dst, &src, Option{DeepCopy: true})`）
 - [tiendc/go-deepcopy](https://github.com/tiendc/go-deepcopy) v1.7.2（`Copy(&dst, &src)`，深拷贝）

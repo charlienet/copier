@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	localcopier "github.com/charlienet/go-misc/copier"
+	localcopier "github.com/charlienet/copier"
 	jinzhu "github.com/jinzhu/copier"
 	deepcopy "github.com/tiendc/go-deepcopy"
 )

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charlienet/go-misc/json"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,7 +42,7 @@ func TestNameConverter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Log(json.Struct2JsonIndent(m2))
+	t.Logf("%+v", m2)
 }
 
 func TestCopy(t *testing.T) {
@@ -173,7 +172,7 @@ func TestSlice(t *testing.T) {
 		assert.NoError(t, tc.err)
 		assert.Equal(t, tc.got, tc.actual)
 
-		t.Log(json.Struct2JsonIndent(tc.got))
+		t.Logf("%+v", tc.got)
 	}
 }
 

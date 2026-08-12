@@ -1,14 +1,22 @@
 package copier
 
 import (
+	"strings"
 	"testing"
 
-	"github.com/charlienet/go-misc/stringx"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNameConvertFn(t *testing.T) {
-	opt := getOpt(WithNameFn(stringx.Camel2Pascal))
+	// camelCase → PascalCase（替代原 stringx.Camel2Pascal，保持零依赖）
+	camel2Pascal := func(s string) string {
+		if s == "" {
+			return s
+		}
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+
+	opt := getOpt(WithNameFn(camel2Pascal))
 	r := opt.NameConvert("test")
 
 	assert.Equal(t, "Test", r)

@@ -3,7 +3,6 @@ package copier
 import (
 	"testing"
 
-	"github.com/charlienet/go-misc/json"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,7 +20,7 @@ func TestAnyMap(t *testing.T) {
 	assert.NotNil(t, m2)
 	assert.Equal(t, m1, m2)
 
-	t.Log(json.Struct2JsonIndent(m2))
+	t.Logf("%+v", m2)
 }
 
 func TestValueMap(t *testing.T) {
@@ -33,7 +32,7 @@ func TestValueMap(t *testing.T) {
 
 	Copy(&m2, &m1)
 
-	t.Log(json.Struct2JsonIndent(m2))
+	t.Logf("%+v", m2)
 }
 
 func TestKeyIntMap(t *testing.T) {
@@ -45,7 +44,7 @@ func TestKeyIntMap(t *testing.T) {
 
 	Copy(&m2, &m1)
 
-	t.Log(json.Struct2JsonIndent(m2))
+	t.Logf("%+v", m2)
 }
 
 func TestStructToMap(t *testing.T) {
@@ -60,7 +59,7 @@ func TestStructToMap(t *testing.T) {
 	assert.NoError(t, Copy(&dst, &src, WithIgnoreEmpty()))
 	assert.Equal(t, dst["Name"], "John")
 
-	t.Log(json.Struct2JsonIndent(dst))
+	t.Logf("%+v", dst)
 }
 
 func TestEmbeddedStruct(t *testing.T) {
@@ -84,8 +83,8 @@ func TestEmbeddedStruct(t *testing.T) {
 	assert.Equal(t, dst["Name"], "John")
 	assert.Equal(t, dst["Age"], 30)
 
-	t.Log(json.Struct2JsonIndent(dst))
-	t.Log(json.Struct2JsonIndent(src))
+	t.Logf("%+v", dst)
+	t.Logf("%+v", src)
 }
 
 func TestMapToStruct(t *testing.T) {
@@ -97,5 +96,5 @@ func TestMapToStruct(t *testing.T) {
 	var p Person
 
 	assert.NoError(t, Copy(&p, &m))
-	t.Log(json.Struct2JsonIndent(p))
+	t.Logf("%+v", p)
 }
