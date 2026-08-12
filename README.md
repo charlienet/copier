@@ -26,6 +26,8 @@ go get github.com/charlienet/copier
   cached too).
 - **Method → field mapping** (`WithMethodMapping`): source getters and destination
   setters participate in copying.
+- **Generic wrappers**: `Clone` / `Convert` with `Must*` panic variants for ergonomic
+  one-liner copying.
 - **Zero third-party dependencies** (standard library only), safe for concurrent use.
 
 ## Quick start
@@ -89,6 +91,57 @@ m, err := copier.ToMap(src) // map[string]any{"Name": "John", "Age": 30}
 srcMap := map[string]any{"Name": "John", "Age": 30}
 var dst User
 err = copier.Copy(&dst, srcMap)
+```
+
+## Generic API
+
+Typed wrappers around `Copy` for ergonomic one-liners.
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/charlienet/copier"
+)
+
+type User struct {
+	Name string
+	Age  int
+}
+
+func main() {
+	src := User{Name: "John", Age: 30}
+
+	// Clone: deep copy to a new instance of the same type
+	clone, err := copier.Clone(src)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(clone.Name) // John
+
+	// MustClone: panics on error — for cases you are sure cannot fail
+	clone2 := copier.MustClone(src)
+
+	// Convert: cross-type copy (e.g. DTO → domain model), with automatic
+	// field conversion such as int → int64
+	type UserDTO struct {
+		Name string
+		Age  int64
+	}
+	dto, err := copier.Convert[User, UserDTO](clone)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(dto.Age) // 30
+
+	// MustConvert: panics on error
+	dto2 := copier.MustConvert[User, UserDTO](clone)
+
+	_ = clone2
+	_ = dto2
+}
 ```
 
 ## Options
