@@ -32,6 +32,9 @@ go get github.com/charlienet/copier
   one-liner copying.
 - **Zero third-party dependencies** (standard library only), safe for concurrent use.
 
+> **⚠️ v0.2 breaking change**: `Copy` is **strict by default** — invalid conversions return an error
+> instead of silently leaving zero values. Opt out with `WithLenient()`.
+
 ## Quick start
 
 ### struct → struct
@@ -146,6 +149,44 @@ func main() {
 }
 ```
 
+## Copy Semantics
+
+Field-kind table for `Copy` (the same rules apply to `Clone` / `Convert`):
+
+| Field kind | Behavior | Mutating dst affects src? |
+|---|---|---|
+| value fields (int, string, bool, ...) | value copy | No |
+| slice / map (top-level) | deep copy (new allocation) | No |
+| `*T` pointer fields | deep copy (auto-alloc + recursive) | No |
+| pointers **inside** struct value fields | shallow copy (shared reference) | **Yes** |
+
+The last row is the one that surprises people: a pointer nested inside a struct value
+field is copied by reference, so dst and src end up sharing the same object:
+
+```go
+type Data struct{ V int }
+
+type Leaf struct {
+	D *Data // pointer inside a struct value field
+}
+
+type Tree struct {
+	Leaf Leaf // Leaf is a struct value field of Tree
+}
+
+func demo() {
+	src := Tree{Leaf: Leaf{D: &Data{V: 1}}}
+	var dst Tree
+	copier.Copy(&dst, src)
+
+	dst.Leaf.D.V = 42
+	fmt.Println(src.Leaf.D.V) // 42 — dst and src share the same *Data
+}
+```
+
+For a full deep copy of such a field, declare it as a pointer type instead
+(`Leaf *Leaf`) — top-level `*T` fields take the auto-alloc + recursive copy path.
+
 ## Options
 
 All options are `With*` functions passed as variadic arguments to `Copy` / `ToMap`.
@@ -163,7 +204,9 @@ All options are `With*` functions passed as variadic arguments to `Copy` / `ToMa
 | `WithSkipFields(...)` | Skip the given field names. |
 | `WithValueConverter(fn)` | Transform field values per field name. |
 | `WithMethodMapping()` | Enable method → field mapping (getters/setters). |
-| `WithStrict()` | Return `ErrConversionFailed` on parse/type-conversion failure instead of silently skipping or leaving zero values. |
+| `WithStrict()` | Return `ErrConversionFailed` on parse/type-conversion failure instead of silently skipping or leaving zero values. Opt-in today; the default from v0.2. |
+| `WithLenient()` (v0.2) | Opt out of strict mode (strict is on by default from v0.2). |
+| `WithNilSrcZero()` (v0.2) | Treat a nil source as a zero target instead of erroring. |
 
 ## Method → field mapping
 
@@ -236,6 +279,45 @@ go test ./...          # unit + audit + fuzz seeds + example tests
 cd bench
 go test -run '^$' -bench . -benchmem -count=3
 ```
+
+## Common Pitfalls
+
+### nil dst / nil src
+
+A top-level nil pointer **dst** is auto-allocated (v0.2). A nil **source** errors with
+`ErrInvalidCopyFrom`; pass `WithNilSrcZero()` to treat it as a zero target instead.
+
+### Deep vs. shallow copy boundaries
+
+See the [Copy Semantics](#copy-semantics) table. Pointers nested inside struct value
+fields are shared between dst and src — mutating one side affects the other. When in
+doubt, check the field kind against the table.
+
+### Case-insensitive matching
+
+Matching is case-insensitive by default, so `userID` may match `UserId`. An accidental
+match is more dangerous than a missed one — a missed field simply stays zero, while an
+accidental match can copy semantically different data. Use `WithCaseSensitive()` when
+names must match exactly.
+
+### Numeric truncation
+
+The lenient mode silently truncates float → int (3.9 → 3). Under strict mode (default
+from v0.2), precision loss returns `ErrConversionFailed` instead.
+
+### Silent skipping
+
+Under strict mode, parse failures and incompatible types return errors — but fields
+that simply don't match (no same-name / same-tag field on the target) are still skipped
+silently. This is by design: distinguish "missing field" (silent) from "conversion
+failed" (error).
+
+### `Convert[T, R]` vs `Copy` vs `Clone`
+
+- `Clone` — deep copy to a new instance of the same type.
+- `Convert` — cross-type copy that returns a new value (e.g. DTO → domain model).
+- `Copy` — copy into an existing destination, with options and error handling.
+- `Must*` variants — use only when you are certain the operation cannot fail (they panic).
 
 ## License
 
