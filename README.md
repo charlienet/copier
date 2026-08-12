@@ -26,6 +26,8 @@ go get github.com/charlienet/copier
   cached too).
 - **Method → field mapping** (`WithMethodMapping`): source getters and destination
   setters participate in copying.
+- **Strict mode** (`WithStrict`): conversion failures surface as `ErrConversionFailed`
+  errors instead of silently skipping or leaving zero values.
 - **Generic wrappers**: `Clone` / `Convert` with `Must*` panic variants for ergonomic
   one-liner copying.
 - **Zero third-party dependencies** (standard library only), safe for concurrent use.
@@ -161,6 +163,7 @@ All options are `With*` functions passed as variadic arguments to `Copy` / `ToMa
 | `WithSkipFields(...)` | Skip the given field names. |
 | `WithValueConverter(fn)` | Transform field values per field name. |
 | `WithMethodMapping()` | Enable method → field mapping (getters/setters). |
+| `WithStrict()` | Return `ErrConversionFailed` on parse/type-conversion failure instead of silently skipping or leaving zero values. |
 
 ## Method → field mapping
 

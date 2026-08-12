@@ -9,4 +9,5 @@ var (
 	ErrNotSupported           = errors.New("copier: type combination not supported")
 	ErrMaxDepthExceeded       = errors.New("max copy depth exceeded")
 	ErrMethodReturnError      = errors.New("copier: method returned error")
+	ErrConversionFailed       = errors.New("copier: value conversion failed")
 )

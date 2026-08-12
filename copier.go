@@ -201,8 +201,11 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 					k = reflect.ValueOf(opt.NameConvert(k.String()))
 				}
 
-				// 4) value 类型兼容：不可转换则跳过
+				// 4) value 类型兼容：不可转换则跳过（严格模式下报错）
 				if !v.Type().ConvertibleTo(dst.Type().Elem()) {
+					if opt.strict {
+						return fmt.Errorf("%w: cannot convert %v to %v", ErrConversionFailed, v.Type(), dst.Type().Elem())
+					}
 					continue
 				}
 				v = v.Convert(dst.Type().Elem())
@@ -530,6 +533,8 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			case string:
 				if b, err := strconv.ParseBool(v); err == nil {
 					dst.SetBool(b)
+				} else if opt.strict {
+					return fmt.Errorf("%w: cannot parse %q as %v", ErrConversionFailed, v, dst.Type())
 				}
 			case bool:
 				dst.SetBool(v)
@@ -539,6 +544,8 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			case string:
 				if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 					dst.SetInt(n)
+				} else if opt.strict {
+					return fmt.Errorf("%w: cannot parse %q as %v", ErrConversionFailed, v, dst.Type())
 				}
 			case bool:
 				if v {
@@ -562,6 +569,8 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			case string:
 				if n, err := strconv.ParseUint(v, 10, 64); err == nil {
 					dst.SetUint(n)
+				} else if opt.strict {
+					return fmt.Errorf("%w: cannot parse %q as %v", ErrConversionFailed, v, dst.Type())
 				}
 			case bool:
 				if v {
@@ -587,6 +596,8 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			case string:
 				if f, err := strconv.ParseFloat(v, 64); err == nil {
 					dst.SetFloat(f)
+				} else if opt.strict {
+					return fmt.Errorf("%w: cannot parse %q as %v", ErrConversionFailed, v, dst.Type())
 				}
 			case bool:
 				if v {
@@ -598,6 +609,22 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 				dst.SetFloat(v)
 			case float32:
 				dst.SetFloat(float64(v))
+			}
+		}
+
+		// 目标类型不在可处理类别内（如 chan/func/complex 等）且不可转换：
+		// 默认静默留零，严格模式下返回 ErrConversionFailed。
+		// 注：String/Bool/Int/Uint/Float 类别内的解析失败已在各 case 内以
+		// strict 报错处理，此处仅兜底不可处理类别，避免误伤成功转换路径。
+		switch dst.Kind() {
+		case reflect.String, reflect.Bool,
+			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+			reflect.Float32, reflect.Float64:
+			// 可处理类别：成功或静默路径均正常结束
+		default:
+			if opt.strict {
+				return fmt.Errorf("%w: cannot convert %v to %v", ErrConversionFailed, src.Type(), dst.Type())
 			}
 		}
 

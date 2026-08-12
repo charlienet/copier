@@ -20,6 +20,7 @@ type options struct {
 	skipFields       []string              // 跳过的字段列表
 	valueConverter   func(string, any) any // 值转换函数
 	methodMapping    bool                  // 启用方法→字段映射（默认关闭）
+	strict           bool                  // 严格模式：转换失败报错而非静默留零/跳过（默认关闭）
 }
 
 // Option 复制选项函数（函数式选项模式）。
@@ -185,6 +186,15 @@ func WithValueConverter(fn func(string, any) any) option {
 func WithMethodMapping() option {
 	return func(o *options) {
 		o.methodMapping = true
+	}
+}
+
+// WithStrict 启用严格模式：strconv 解析失败或值类型不兼容时返回
+// ErrConversionFailed 哨兵错误，而非静默跳过/留零值。默认关闭。
+// 注：strict 不影响字段匹配 plan（与 ignoreEmpty 同类，运行时判断）。
+func WithStrict() option {
+	return func(o *options) {
+		o.strict = true
 	}
 }
 
