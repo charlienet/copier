@@ -681,11 +681,28 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		assert.Equal(t, "x", dst["F"])
 	})
 
-	t.Run("fn error skipped", func(t *testing.T) {
+	t.Run("fn error fails copy in strict mode", func(t *testing.T) {
+		// v0.6：Fn 返回 error 时 strict 报 ErrConversionFailed（FieldPathError 定位）
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
 		err := Copy(src, &dst).Converters(TypeConverter{
+			FieldName: "F", SrcType: "", DstType: int(0),
+			Fn: func(src any) (any, error) { return nil, errors.New("boom") },
+		}).Do()
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrConversionFailed))
+		var fpe *FieldPathError
+		assert.True(t, errors.As(err, &fpe))
+		assert.Equal(t, "F", fpe.Field)
+	})
+
+	t.Run("fn error silently skipped under Lenient", func(t *testing.T) {
+		// v0.6：Lenient 恢复旧的静默回退语义（字段按未转换处理）
+		src := srcT{F: "x"}
+		dst := map[string]any{}
+
+		err := Copy(src, &dst).Lenient().Converters(TypeConverter{
 			FieldName: "F", SrcType: "", DstType: int(0),
 			Fn: func(src any) (any, error) { return nil, errors.New("boom") },
 		}).Do()

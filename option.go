@@ -45,10 +45,13 @@ func (opt *options) NameConvert(name string) string {
 }
 
 // TypeConvert 遍历 opt.converters，按 TypeConverter 声明的字段名/源类型/目标类型匹配并执行转换。
-// 匹配成功返回 (转换结果, true)，否则返回 (原值, false)。
-func (opt options) TypeConvert(fieldName string, value reflect.Value) (reflect.Value, bool) {
+// 匹配成功返回 (转换结果, true, nil)，否则返回 (原值, false, nil)。
+// Fn 返回 error 时：返回 (原值, false, fnErr)——strict 下由调用方经 converterErr
+// 转成可定位的 ErrConversionFailed，Lenient 下回退为"未转换"沿用原值继续。
+// Fn 返回 nil 结果保持"未转换"语义（静默 continue，不报错）。
+func (opt options) TypeConvert(fieldName string, value reflect.Value) (reflect.Value, bool, error) {
 	if len(opt.converters) == 0 {
-		return value, false
+		return value, false, nil
 	}
 
 	for _, tc := range opt.converters {
@@ -64,8 +67,11 @@ func (opt options) TypeConvert(fieldName string, value reflect.Value) (reflect.V
 			continue
 		}
 
-		converted, err := tc.Fn(value.Interface())
-		if err != nil || converted == nil {
+		converted, fnErr := tc.Fn(value.Interface())
+		if fnErr != nil {
+			return value, false, fnErr
+		}
+		if converted == nil {
 			continue
 		}
 
@@ -73,10 +79,10 @@ func (opt options) TypeConvert(fieldName string, value reflect.Value) (reflect.V
 			continue
 		}
 
-		return reflect.ValueOf(converted), true
+		return reflect.ValueOf(converted), true, nil
 	}
 
-	return value, false
+	return value, false, nil
 }
 
 func typeMatch(src any, t reflect.Type) bool {

@@ -84,7 +84,7 @@ func FuzzTypeConvert(f *testing.F) {
 		})
 
 		v := reflect.ValueOf(value)
-		_, _ = opt.TypeConvert("F", v)
-		_, _ = opt.TypeConvert("Other", v)
+		_, _, _ = opt.TypeConvert("F", v)
+		_, _, _ = opt.TypeConvert("Other", v)
 	})
 }

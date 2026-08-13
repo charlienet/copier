@@ -61,6 +61,12 @@ import (
 	"time"
 )
 
+// converterErr 包装 TypeConverter.Fn 返回的错误：strict 下转成可定位的
+// ErrConversionFailed（FieldPathError 带字段名），原始错误文本保留在消息中。
+func converterErr(fieldName string, fnErr error) error {
+	return &FieldPathError{Field: fieldName, Err: fmt.Errorf("%w: TypeConverter failed: %v", ErrConversionFailed, fnErr)}
+}
+
 func copier(dst, src any, opt *options) error {
 	// 顶层 dst 为 nil 指针链时自动分配（对齐 deepCopyInner Pointer 分支自动 New 语义）：
 	// Copy(&p, src)（&p 非 nil、p 为 nil *T）先分配指针链使目标可寻址，不再报
@@ -186,7 +192,13 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 				if k.Kind() == reflect.String {
 					fieldName = k.String()
 				}
-				v, _ := opt.TypeConvert(fieldName, src.MapIndex(key))
+				v, _, err := opt.TypeConvert(fieldName, src.MapIndex(key))
+				if err != nil {
+					if opt.strict {
+						return converterErr(fieldName, err)
+					}
+					// Lenient：回退为未转换，v 为原值，继续
+				}
 
 				// 3) NameConvert（仅 string key）
 				if k.Kind() == reflect.String {
@@ -286,7 +298,13 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			}
 
 			name := toName(sf.Name, tag, opt)
-			value, converted := opt.TypeConvert(sf.Name, src.Field(i))
+			value, converted, err := opt.TypeConvert(sf.Name, src.Field(i))
+			if err != nil {
+				if opt.strict {
+					return converterErr(sf.Name, err)
+				}
+				// Lenient：回退为未转换，value 为原值，继续
+			}
 
 			// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 			if opt.valueConverter != nil {
@@ -340,7 +358,13 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 
 				v := src.MapIndex(key)
 				// 应用类型转换器（name 为原始 map key，即源字段名，与 map→map 路径语义一致）
-				v, _ = opt.TypeConvert(name, v)
+				v, _, err := opt.TypeConvert(name, v)
+				if err != nil {
+					if opt.strict {
+						return converterErr(name, err)
+					}
+					// Lenient：回退为未转换，v 为原值，继续
+				}
 				name = opt.NameConvert(name)
 				tv := getFieldByName(dst, name, opt)
 
@@ -685,7 +709,13 @@ func cpyStruct(dst, src reflect.Value, depth int, opt *options, visited map[uint
 
 		// 应用类型转换器（TypeConvert → valueConverter → 判空 → 递归，
 		// 处理顺序与 struct→map 路径一致；v0.4.1 起 struct→struct 生效）
-		sField, _ = opt.TypeConvert(sf.Name, sField)
+		sField, _, err := opt.TypeConvert(sf.Name, sField)
+		if err != nil {
+			if opt.strict {
+				return converterErr(sf.Name, err)
+			}
+			// Lenient：回退为未转换，sField 为原值，继续
+		}
 
 		// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 		if opt.valueConverter != nil {
@@ -757,7 +787,13 @@ func cpyStructByPlan(dst, src reflect.Value, plan *structPlan, depth int, opt *o
 		sField := srcField
 
 		// 应用类型转换器（FieldName 用 m.srcName：源字段原始名，与逐字段路径一致）
-		sField, _ = opt.TypeConvert(m.srcName, sField)
+		sField, _, err := opt.TypeConvert(m.srcName, sField)
+		if err != nil {
+			if opt.strict {
+				return converterErr(m.srcName, err)
+			}
+			// Lenient：回退为未转换，sField 为原值，继续
+		}
 
 		// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 		if opt.valueConverter != nil {
@@ -803,7 +839,13 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 		}
 
 		srcField := src.Field(e.srcIdx)
-		value, converted := opt.TypeConvert(e.srcName, srcField)
+		value, converted, err := opt.TypeConvert(e.srcName, srcField)
+		if err != nil {
+			if opt.strict {
+				return converterErr(e.srcName, err)
+			}
+			// Lenient：回退为未转换，value 为原值，继续
+		}
 
 		// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 		if opt.valueConverter != nil {
@@ -855,7 +897,13 @@ func cpyMapToStruct(dst, src reflect.Value, plan *mapToStructPlan, depth int, op
 
 		v := src.MapIndex(key)
 		// 应用类型转换器（name 为原始 map key，即源字段名）
-		v, _ = opt.TypeConvert(name, v)
+		v, _, err := opt.TypeConvert(name, v)
+		if err != nil {
+			if opt.strict {
+				return converterErr(name, err)
+			}
+			// Lenient：回退为未转换，v 为原值，继续
+		}
 		name = opt.NameConvert(name)
 
 		// 查表定位 dst 字段（与 getFieldByName 等价）
