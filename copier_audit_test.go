@@ -255,7 +255,7 @@ func TestAuditH2CanSetPanic(t *testing.T) {
 	})
 }
 
-// ============ M-3 TypeConvert 存根不生效（option.go:59-61 恒返回 false） ============
+// ============ M-3 TypeConvert 转换器生效（struct→map 路径） ============
 
 func TestAuditM3TypeConvertStub(t *testing.T) {
 	type Order struct {
@@ -277,7 +277,7 @@ func TestAuditM3TypeConvertStub(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 期望：转换器生效，CreatedAt 转为 time.Time
-	// 当前：TypeConvert 恒返回 (value, false)，converters 从不被调用 → 仍是 string → FAIL
+	// v0.4.1 起 TypeConvert 全路径生效（含 struct→struct / map→struct）
 	assert.IsType(t, time.Time{}, dst["CreatedAt"])
 	assert.Equal(t, time.Date(2024, 1, 2, 15, 4, 5, 0, time.UTC), dst["CreatedAt"])
 }

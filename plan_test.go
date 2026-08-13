@@ -180,8 +180,8 @@ func TestPlanEquivalence(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrMaxDepthExceeded))
 	})
 
-	t.Run("with converters behaves as existing struct-to-struct path", func(t *testing.T) {
-		// 既有行为：struct→struct 不调用 TypeConvert，结果与默认一致
+	t.Run("with converters applies on struct-to-struct path", func(t *testing.T) {
+		// v0.4.1：struct→struct 同样调用 TypeConvert（plan 路径验证），转换器生效
 		fnCalled := false
 		var dst planDst
 		err := Copy(src, &dst).Converters(TypeConverter{
@@ -194,8 +194,8 @@ func TestPlanEquivalence(t *testing.T) {
 			},
 		}).Do()
 		assert.NoError(t, err)
-		assert.False(t, fnCalled)
-		assert.Equal(t, planDst{Name: "n", Age: 7, Target: "r"}, dst)
+		assert.True(t, fnCalled)
+		assert.Equal(t, planDst{Name: "n", Age: 70, Target: "r"}, dst)
 	})
 
 	t.Run("with valueConverter receives src original field names", func(t *testing.T) {

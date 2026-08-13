@@ -140,7 +140,7 @@ func TestCopyEquivalence(t *testing.T) {
 	})
 
 	t.Run("Converters", func(t *testing.T) {
-		// TypeConvert 仅 struct→map / map→map 路径生效（既有行为），用 map 目标验证
+		// TypeConvert 全路径生效（v0.4.1：struct→struct / struct→map / map→struct / map→map），用 map 目标验证
 		type s struct{ Name string }
 		src := s{Name: "abc"}
 		tc := TypeConverter{
@@ -266,6 +266,23 @@ func TestCopyDoReuse(t *testing.T) {
 
 	assert.NoError(t, b.Do()) // 同一实例二次执行
 	assert.Equal(t, first, dst)
+	assert.Equal(t, "n", dst.Name)
+}
+
+func TestCopyDoReuseWithOptions(t *testing.T) {
+	// 带选项的 builder 复用：同一实例重复 Do() 每次应用同一组选项，结果幂等
+	src := chSrc{Name: "n", Age: 0} // Age 零值：IgnoreEmpty 跳过
+	var dst chDst
+
+	b := Copy(src, &dst).IgnoreEmpty().CaseSensitive()
+	assert.NoError(t, b.Do())
+	first := dst
+	assert.Equal(t, "n", dst.Name)
+	assert.Equal(t, 0, dst.Age) // Age 零值被忽略
+
+	dst = chDst{} // 重置目标后再执行
+	assert.NoError(t, b.Do())
+	assert.Equal(t, first, dst) // 两次执行结果一致（幂等）
 	assert.Equal(t, "n", dst.Name)
 }
 

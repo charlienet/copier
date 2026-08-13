@@ -17,8 +17,8 @@
 //
 // Copy 在字段级别支持自动类型转换（string↔int/uint/float/bool 等），由 reflect
 // 内置规则和 strconv 协同处理。如需自定义类型转换（如 string→time.Time），
-// 请使用 .Converters() 注册 TypeConverter。map 值的转换同样通过 TypeConvert 完成，
-// 而非 valueConverter（后者专用于 struct 字段名级别转换）。
+// 请使用 .Converters() 注册 TypeConverter（v0.4.1 起全路径生效：struct→struct、
+// struct→map、map→struct、map→map）。valueConverter 专用于 struct 字段名级别转换。
 //
 // # 循环引用
 //
@@ -339,6 +339,8 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 				}
 
 				v := src.MapIndex(key)
+				// 应用类型转换器（name 为原始 map key，即源字段名，与 map→map 路径语义一致）
+				v, _ = opt.TypeConvert(name, v)
 				name = opt.NameConvert(name)
 				tv := getFieldByName(dst, name, opt)
 
@@ -680,6 +682,10 @@ func cpyStruct(dst, src reflect.Value, depth int, opt *options, visited map[uint
 
 		sField := src.Field(i)
 
+		// 应用类型转换器（TypeConvert → valueConverter → 判空 → 递归，
+		// 处理顺序与 struct→map 路径一致；v0.4.1 起 struct→struct 生效）
+		sField, _ = opt.TypeConvert(sf.Name, sField)
+
 		// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 		if opt.valueConverter != nil {
 			c := opt.valueConverter(sf.Name, sField.Interface())
@@ -711,7 +717,7 @@ func cpyStruct(dst, src reflect.Value, depth int, opt *options, visited map[uint
 // cpyStructByPlan 按预计算 plan.fields 迭代，行为与 cpyStruct 逐字段逻辑完全等价：
 // 对每条 fieldMapping：
 //   - dstIdx 非空：dst.FieldByIndex 取值，不可设置时降级 setter（仅启用方法映射时）；
-//     可设置则走与现有 cpyStruct 相同的后续逻辑（valueConverter → ignoreEmpty → deepCopyInner）
+//     可设置则走与现有 cpyStruct 相同的后续逻辑（TypeConvert → valueConverter → ignoreEmpty → deepCopyInner）
 //   - dstIdx 为空：无匹配字段，降级尝试 callSetter（仅启用方法映射时），否则静默跳过
 //
 // 全部字段处理完后，与现有一致：启用方法映射时调用 copyGetters。
@@ -748,6 +754,9 @@ func cpyStructByPlan(dst, src reflect.Value, plan *structPlan, depth int, opt *o
 		}
 
 		sField := srcField
+
+		// 应用类型转换器（FieldName 用 m.srcName：源字段原始名，与逐字段路径一致）
+		sField, _ = opt.TypeConvert(m.srcName, sField)
 
 		// 应用值转换函数（先转换，后判空，避免空值被提前跳过）
 		if opt.valueConverter != nil {
@@ -833,9 +842,9 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 
 // cpyMapToStruct 按预计算 plan.lookup 迭代，行为与 deepCopyInner Struct 分支
 // map→struct 循环完全等价：
-// key 转 string（非 string → ErrMapKeyNotMatch）→ NameConvert → 查表定位 dst 字段
-// （与 getFieldByName 等价，FieldByIndex 索引链含嵌入提升）→ CanSet 检查 →
-// isSkipField → valueConverter → ignoreEmpty → deepCopyInner 递归。
+// key 转 string（非 string → ErrMapKeyNotMatch）→ TypeConvert → NameConvert →
+// 查表定位 dst 字段（与 getFieldByName 等价，FieldByIndex 索引链含嵌入提升）→
+// CanSet 检查 → isSkipField → valueConverter → ignoreEmpty → deepCopyInner 递归。
 func cpyMapToStruct(dst, src reflect.Value, plan *mapToStructPlan, depth int, opt *options, visited map[uintptr]bool) error {
 	for _, key := range src.MapKeys() {
 		name, ok := key.Interface().(string)
@@ -844,6 +853,8 @@ func cpyMapToStruct(dst, src reflect.Value, plan *mapToStructPlan, depth int, op
 		}
 
 		v := src.MapIndex(key)
+		// 应用类型转换器（name 为原始 map key，即源字段名）
+		v, _ = opt.TypeConvert(name, v)
 		name = opt.NameConvert(name)
 
 		// 查表定位 dst 字段（与 getFieldByName 等价）

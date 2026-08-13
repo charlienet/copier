@@ -24,7 +24,8 @@ func Copy[S, D any](src S, dst *D) *Copier[S, D] {
 }
 
 // Do 执行深拷贝，内部复用 copier 内核（plan 缓存兼容）。
-// Do 不修改构建器状态，同一 Copier 实例可重复调用。
+// Do 不修改构建器状态，同一 Copier 实例可重复执行，每次应用同一组选项；
+// 对已填充 dst 为覆盖语义（匹配字段覆盖、未匹配字段保留）。
 // Clone 入口请以 Result() 终结。
 func (c *Copier[S, D]) Do() error {
 	return copier(c.dst, c.src, &c.opts)

@@ -18,7 +18,7 @@ go get github.com/charlienet/copier
   configurable via `TagName()`.
 - **Recursion depth limit** with `MaxDepth()`.
 - **TypeConverter triple match** (field name + source type + destination type) for
-  custom conversions.
+  custom conversions (all paths since v0.4.1).
 - **Pointer cycle detection**: self- and mutual references terminate safely without
   stack overflow.
 - **Reflection plan cache**: default-configuration struct→struct copying is roughly
@@ -38,6 +38,11 @@ go get github.com/charlienet/copier
 
 > **⚠️ v0.2 breaking change**: copying is **strict by default** — invalid conversions
 > return an error instead of silently leaving zero values. Opt out with `Lenient()`.
+
+> **⚠️ Behavior change (v0.4.1+)**: `TypeConverter` now applies on all copy paths
+> (struct→struct, map→struct), not just map destinations. Converters registered
+> before v0.4.1 only received map values; they now also receive struct field
+> values.
 
 ## API
 
@@ -67,6 +72,17 @@ err := copier.Copy(src, &dst).Do() // dst is map[string]any{"Name": "John", "Age
 
 On failure, seven sentinel errors are returned (see [Errors](#errors)); they are
 comparable with `errors.Is`.
+
+## `DefaultOptions`
+
+`DefaultOptions` is the shared baseline copied into every new builder. Mutating
+it affects all subsequent copies, so:
+
+- modify it **before** creating any builder;
+- do **not** overlap mutations with concurrent copy calls.
+
+For one-off needs prefer chain methods or `With(&Config{...})` instead — they are
+local to the builder and safe.
 
 ## Fail-fast / panic
 
@@ -309,6 +325,11 @@ func demo() {
 For a full deep copy of such a field, declare it as a pointer type instead
 (`Leaf *Leaf`) — top-level `*T` fields take the auto-alloc + recursive copy path.
 
+When the same pointer appears in multiple fields, each field receives an
+**independent** deep copy — reference identity is not preserved. The `visited`
+map only terminates pointer cycles; it does not merge or deduplicate shared
+references.
+
 ## Chainable options
 
 All options are chain methods on the `*Copier[S, D]` builder. Each method returns
@@ -333,7 +354,7 @@ with `CaseSensitive()`).
 | `SkipFields(...)` | `*Copier[S, D]` | Skip the given field names. |
 | `ValueConverter(fn)` | `*Copier[S, D]` | Transform field values per field name. |
 | `MethodMapping()` | `*Copier[S, D]` | Enable method → field mapping (getters/setters). |
-| `MaxDepth(depth)` | `*Copier[S, D]` | Limit recursion depth; exceeding it returns `ErrMaxDepthExceeded`. |
+| `MaxDepth(depth)` | `*Copier[S, D]` | Limit recursion depth (counts from 0); exceeding it returns `ErrMaxDepthExceeded`. `MaxDepth(0)` rejects any nested copy. |
 | `NilSrcZero()` | `*Copier[S, D]` | Treat a nil source as a zero target instead of erroring. |
 | `With(cfg)` | `*Copier[S, D]` | Apply a one-shot `Config` (non-zero fields only; `nil` is a no-op) — see [One-shot config](#one-shot-config-with-withconfig). |
 | `Do()` | `error` | Execute the copy; returns an error on failure. |
