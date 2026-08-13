@@ -198,29 +198,6 @@ There is no longer a separate untyped `Copy(dst, src, ...)` function — the new
 `Copy` takes `src` first (like `json.Unmarshal`) and covers dynamic scenarios with
 `S` / `D` = `any` (see [API](#api)).
 
-### Migration from v0.2
-
-> **Note**: `Must()` in the target column was removed in v0.4; apply the
-> v0.3→v0.4 migration table below as well.
-
-| v0.2 (historical) | v0.3 |
-|---|---|
-| `Copy(&dst, src)` | `Copy(src, &dst).Do()` — **argument order reversed**: `src` first, like `json.Unmarshal` |
-| `Copy(&dst, src, WithIgnoreEmpty(), WithMaxDepth(5))` | `Copy(src, &dst).IgnoreEmpty().MaxDepth(5).Do()` |
-| `CopyTo(src, &dst).Do()` | `Copy(src, &dst).Do()` |
-| `Convert[Src, Dst](src)` | same-type: `Clone[T](src)`; cross-type: `var dst Dst; Copy(src, &dst).Do()` |
-| `MustConvert[Src, Dst](src)` | same-type: `var dst T; Copy(src, &dst).Must()`; cross-type: `var dst Dst; Copy(src, &dst).Must()` |
-| `ToMap(src)` | `var m map[string]any; Copy(src, &m).Do()` |
-| `Clone[T](src)` (same-type) | `Clone[T](src)` (unchanged) |
-| `WithX(...)` option functions | chain methods `.X(...)` — see [Chainable options](#chainable-options) |
-
-### Migration from v0.3 (v0.4 breaking change)
-
-| v0.3 | v0.4 |
-|---|---|
-| `Clone[T](src)` → `(T, error)` | `Clone[T](src).Result()` → `(T, error)`; the builder also accepts options (`Clone(src).IgnoreEmpty().Result()`) |
-| `Copy(src, &dst).Must()` | `if err := Copy(src, &dst).Do(); err != nil { panic(err) }` — panic terminals removed; fail fast is a caller decision |
-
 ## Generic API
 
 `Clone` returns a builder that allocates and returns a new value of the same type
