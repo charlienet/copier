@@ -44,6 +44,11 @@ go get github.com/charlienet/copier
 > before v0.4.1 only received map values; they now also receive struct field
 > values.
 
+> **Pre-1.0 stability**: from v0.5.1 the exported API is frozen until v1.0 — no
+> symbols will be removed, renamed, or have their types changed. Behavioral
+> strictness fixes may still land in minor releases and are announced in the
+> release notes.
+
 ## API
 
 Two main entry points cover every use case:
@@ -288,7 +293,9 @@ strict mode, `Strict: true` opts back in — when both are set, `Strict` wins),
 and slices / maps / funcs when non-nil. Once `Lenient()` is enabled you can
 re-enable strict mode with `Strict()` or `Config.Strict` (and vice versa).
 `AllowPrecisionLoss: true` narrows strict mode to exempt only numeric
-precision-loss checks. Note the `MaxDepth` semantics differ deliberately:
+precision-loss checks. `AllowPrecisionLoss` is one-way: once enabled it cannot
+be turned off via `Config` (its zero value does not override) or chain methods —
+create a new builder if needed. Note the `MaxDepth` semantics differ deliberately:
 `Config.MaxDepth: 0` means "not set" (keep the current behavior), while the
 chain method `MaxDepth(0)` actively rejects any nested copy.
 
@@ -421,7 +428,9 @@ errors.Is(err, copier.ErrInvalidCopyFrom) // true
 
 > **Note**: A `TypeConverter.Fn` returning an error or nil is treated as
 > "not converted" (silently skipped) and does not produce an error, even in
-> strict mode.
+> strict mode. A `Fn` whose output type does not match the declared `DstType`
+> also falls back silently: the converter is skipped and the field is copied
+> unconverted.
 
 Field-level copy failures are wrapped in a `FieldPathError{Field, Err}` — its
 `Error()` output is byte-identical to the previous `"field: err"` format, and
@@ -484,6 +493,27 @@ The lenient mode silently truncates float → int (3.9 → 3). Under strict mode
 since v0.2), precision loss returns `ErrConversionFailed` instead. For a middle
 ground, `AllowPrecisionLoss()` (or `Config.AllowPrecisionLoss`) exempts only
 numeric precision checks while keeping other strict errors.
+
+For a per-field escape, use a `TypeConverter` whose `Fn` outputs the exact
+destination field type — the converted value is written directly and bypasses
+the strict precision check for that field only:
+
+```go
+// Per-field precision-loss escape: a converter that outputs the exact dst
+// field type bypasses the strict precision check for that field only.
+err := copier.Copy(src, &dst).Converters(copier.TypeConverter{
+	FieldName: "Ratio",
+	SrcType:   float64(0),
+	DstType:   int(0),
+	Fn: func(src any) (any, error) {
+		return int(src.(float64)), nil // exact dst type: no precision check
+	},
+}).Do()
+```
+
+The difference from the builder-wide `AllowPrecisionLoss()`: a converter
+exempts one field, while `AllowPrecisionLoss()` exempts all numeric conversions
+on the builder.
 
 ### Silent skipping
 
