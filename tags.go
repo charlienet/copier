@@ -12,7 +12,7 @@ type tagt uint8
 // 用户可见语法严格保留：copier:"-"、copier:"must"、copier:"toname=xxx"、
 // copier:"must,toname=xxx" 组合。
 const (
-	tagRequired tagt = 1 << iota // must：仅 WithMust 时拷贝
+	tagRequired tagt = 1 << iota // must：仅 MustFields 时拷贝
 	tagSkip                      // - / ignore：忽略该字段
 	tagToName                    // toname=xxx：重命名为 xxx
 )
