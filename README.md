@@ -44,6 +44,11 @@ go get github.com/charlienet/copier
 > before v0.4.1 only received map values; they now also receive struct field
 > values.
 
+> **⚠️ Behavior change (v0.6)**: under strict mode, a `TypeConverter.Fn`
+> returning an error now fails the copy with `ErrConversionFailed` (locatable
+> via `FieldPathError`) instead of silently falling back. `Lenient()` restores
+> the old silent behavior.
+
 > **Pre-1.0 stability**: from v0.5.1 the exported API is frozen until v1.0 — no
 > symbols will be removed, renamed, or have their types changed. Behavioral
 > strictness fixes may still land in minor releases and are announced in the
@@ -426,11 +431,12 @@ err := copier.Copy[any, map[string]any](nil, &m).Do()
 errors.Is(err, copier.ErrInvalidCopyFrom) // true
 ```
 
-> **Note**: A `TypeConverter.Fn` returning an error or nil is treated as
-> "not converted" (silently skipped) and does not produce an error, even in
-> strict mode. A `Fn` whose output type does not match the declared `DstType`
-> also falls back silently: the converter is skipped and the field is copied
-> unconverted.
+> **Note**: Returning `nil` from a `TypeConverter.Fn` is treated as "not
+> converted" (silently skipped). Returning an `error` fails the copy in strict
+> mode (`ErrConversionFailed`, locatable via `FieldPathError`); `Lenient()`
+> restores the old silent fallback. A `Fn` whose output type does not match the
+> declared `DstType` also falls back silently: the converter is skipped and the
+> field is copied unconverted.
 
 Field-level copy failures are wrapped in a `FieldPathError{Field, Err}` — its
 `Error()` output is byte-identical to the previous `"field: err"` format, and
