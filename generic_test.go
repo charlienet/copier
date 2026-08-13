@@ -1,5 +1,8 @@
 package copier
 
+// 泛型 API 测试：Clone 同类型深拷贝；跨类型走 Copy；panic 统一到 Copy(...).Must()
+// Clone[T] 同类型深拷贝；跨类型（含 struct→map）走 Copy。
+
 import (
 	"errors"
 	"testing"
@@ -16,9 +19,9 @@ type gCloneSrc struct {
 	Meta  map[string]string
 }
 
-// ============ Clone：值类型 struct（含嵌套/切片/map 字段） ============
+// ============ Clone[T]：值类型 struct（含嵌套/切片/map 字段） ============
 
-func TestGenericCloneStruct(t *testing.T) {
+func TestGenericCloneSameTypeStruct(t *testing.T) {
 	src := gCloneSrc{
 		Name:  "x",
 		Inner: gCloneInner{N: 1},
@@ -26,7 +29,7 @@ func TestGenericCloneStruct(t *testing.T) {
 		Meta:  map[string]string{"k": "v"},
 	}
 
-	got, err := Clone(src)
+	got, err := Clone[gCloneSrc](src)
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -39,13 +42,13 @@ func TestGenericCloneStruct(t *testing.T) {
 	assert.Equal(t, 1, src.Inner.N)
 }
 
-// ============ Clone：指针类型（T=*Foo） ============
+// ============ Clone[T]：指针类型（S=*Foo） ============
 
-func TestGenericClonePointer(t *testing.T) {
+func TestGenericCloneSameTypePointer(t *testing.T) {
 	t.Run("valid pointer deep copied", func(t *testing.T) {
 		p := &gCloneSrc{Name: "x", Items: []int{1}}
 
-		got, err := Clone(p)
+		got, err := Clone[*gCloneSrc](p)
 		assert.NoError(t, err)
 		assert.NotNil(t, got)
 		assert.Equal(t, "x", got.Name)
@@ -57,18 +60,18 @@ func TestGenericClonePointer(t *testing.T) {
 	t.Run("nil pointer returns ErrInvalidCopyFrom", func(t *testing.T) {
 		var p *gCloneSrc
 
-		got, err := Clone(p)
+		got, err := Clone[*gCloneSrc](p)
 		assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
-		assert.Nil(t, got) // 出错时返回 T 零值（nil 指针）
+		assert.Nil(t, got) // 出错时返回 D 零值（nil 指针）
 	})
 }
 
-// ============ Clone：map / slice 类型 ============
+// ============ Clone[T]：map / slice 类型 ============
 
-func TestGenericCloneMap(t *testing.T) {
+func TestGenericCloneSameTypeMap(t *testing.T) {
 	src := map[string]any{"a": 1, "b": []int{1, 2}}
 
-	got, err := Clone(src)
+	got, err := Clone[map[string]any](src)
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -77,10 +80,10 @@ func TestGenericCloneMap(t *testing.T) {
 	assert.Equal(t, 1, src["b"].([]int)[0])
 }
 
-func TestGenericCloneSlice(t *testing.T) {
+func TestGenericCloneSameTypeSlice(t *testing.T) {
 	src := []int{1, 2, 3}
 
-	got, err := Clone(src)
+	got, err := Clone[[]int](src)
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -88,14 +91,9 @@ func TestGenericCloneSlice(t *testing.T) {
 	assert.Equal(t, 1, src[0])
 }
 
-// ============ MustClone：成功 + panic 路径 ============
-
-func TestGenericMustClone(t *testing.T) {
-	got := MustClone(gCloneSrc{Name: "x"})
-	assert.Equal(t, "x", got.Name)
-}
-
-func TestGenericMustClonePanic(t *testing.T) {
+// panic 语义统一到 Copy(...).Must() 终端：
+// nil 源场景经 Copy[any](nil, &dst).Must() panic(ErrInvalidCopyFrom)。
+func TestGenericMustPanicOnNilSrc(t *testing.T) {
 	panicked := false
 	func() {
 		defer func() {
@@ -106,8 +104,9 @@ func TestGenericMustClonePanic(t *testing.T) {
 				assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
 			}
 		}()
-		// T=any 且 src=nil → from.IsValid()==false → ErrInvalidCopyFrom
-		MustClone[any](nil)
+		// src=nil（S=any）→ from.IsValid()==false → ErrInvalidCopyFrom → Must() panic
+		var dst any
+		Copy[any](nil, &dst).Must()
 	}()
 	assert.True(t, panicked)
 }
@@ -124,20 +123,22 @@ type gConvDst struct {
 	Age  int64 // 类型不同（int→int64），验证自动转换
 }
 
-func TestGenericConvert(t *testing.T) {
-	got, err := Convert[gConvSrc, gConvDst](gConvSrc{Name: "n", Age: 30})
+func TestGenericCloneCrossType(t *testing.T) {
+	// 跨类型（Clone 仅同类型）走 Copy：src struct → dst struct（int→int64 自动转换）
+	var dst gConvDst
+	err := Copy(gConvSrc{Name: "n", Age: 30}, &dst).Do()
 	assert.NoError(t, err)
-	assert.Equal(t, "n", got.Name)
-	assert.Equal(t, int64(30), got.Age)
+	assert.Equal(t, "n", dst.Name)
+	assert.Equal(t, int64(30), dst.Age)
 }
 
-// ============ Convert：到 interface 类型（D=any） ============
+// ============ 跨类型到 interface（D=any，走 Copy） ============
 
-func TestGenericConvertToInterface(t *testing.T) {
+func TestGenericCloneToInterface(t *testing.T) {
 	src := map[string]any{"a": 1}
 
-	got, err := Convert[map[string]any, any](src)
-	assert.NoError(t, err)
+	var got any
+	assert.NoError(t, Copy(src, &got).Do())
 	gotMap, ok := got.(map[string]any)
 	assert.True(t, ok)
 	assert.Equal(t, src, gotMap)
@@ -147,26 +148,4 @@ func TestGenericConvertToInterface(t *testing.T) {
 	assert.Equal(t, 1, src["a"])
 }
 
-// ============ MustConvert：成功 + panic 路径 ============
-
-func TestGenericMustConvert(t *testing.T) {
-	got := MustConvert[gConvSrc, gConvDst](gConvSrc{Name: "n", Age: 1})
-	assert.Equal(t, int64(1), got.Age)
-	assert.Equal(t, "n", got.Name)
-}
-
-func TestGenericMustConvertPanic(t *testing.T) {
-	panicked := false
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-				err, ok := r.(error)
-				assert.True(t, ok, "panic 值应为 error")
-				assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
-			}
-		}()
-		MustConvert[any, any](nil)
-	}()
-	assert.True(t, panicked)
-}
+// 跨类型场景（Clone 仅同类型）用 Copy 验证，见 TestGenericCloneCrossType。

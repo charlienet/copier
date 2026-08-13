@@ -8,7 +8,7 @@ import (
 )
 
 // FuzzCopy 用 fuzz 数据构造 map[string]any / struct 变体后驱动 Copy，
-// 覆盖 map→map、map→struct、struct→map（ToMap）三条主要路径。
+// 覆盖 map→map、map→struct、struct→map 三条主要路径。
 func FuzzCopy(f *testing.F) {
 	f.Add("hello")
 	f.Add("name=John,age=30")
@@ -26,7 +26,7 @@ func FuzzCopy(f *testing.F) {
 
 		// map → map
 		var to1 map[string]any
-		if err := Copy(&to1, src); err != nil {
+		if err := Copy(src, &to1).Do(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -35,12 +35,13 @@ func FuzzCopy(f *testing.F) {
 			Name string
 			Age  int
 		}
-		if err := Copy(&to2, src); err != nil {
+		if err := Copy(src, &to2).Do(); err != nil {
 			t.Fatal(err)
 		}
 
 		// struct → map
-		if _, err := ToMap(to2); err != nil {
+		var to3 map[string]any
+		if err := Copy(to2, &to3).Do(); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -71,14 +72,16 @@ func FuzzTypeConvert(f *testing.F) {
 	f.Add("")
 
 	f.Fuzz(func(t *testing.T, value string) {
-		opt := getOpt(WithConverters(TypeConverter{
-			FieldName: "F",
-			SrcType:   "",
-			DstType:   "",
-			Fn: func(src any) (any, error) {
-				return src, nil
-			},
-		}))
+		opt := testOpt(func(o *options) {
+			o.converters = []TypeConverter{TypeConverter{
+				FieldName: "F",
+				SrcType:   "",
+				DstType:   "",
+				Fn: func(src any) (any, error) {
+					return src, nil
+				},
+			}}
+		})
 
 		v := reflect.ValueOf(value)
 		_, _ = opt.TypeConvert("F", v)

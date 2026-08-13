@@ -24,7 +24,7 @@ func TestAuditC1SliceDeepCopy(t *testing.T) {
 		src := srcS{Items: []int{1, 2, 3}}
 		var dst dstS
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 
 		dst.Items[0] = 999
@@ -40,7 +40,7 @@ func TestAuditC1SliceDeepCopy(t *testing.T) {
 		src := srcS{Items: []int{1, 2, 3}}
 		var dst dstS
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, []int64{1, 2, 3}, dst.Items)
 	})
@@ -59,7 +59,7 @@ func TestAuditC3InterfaceField(t *testing.T) {
 		src := srcI{Data: "hello"}
 		var dst dstI
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "hello", dst.Data)
 	})
@@ -74,7 +74,7 @@ func TestAuditC3InterfaceField(t *testing.T) {
 		src := srcC{Data: "hello"}
 		var dst dstC
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "hello", dst.Data)
 	})
@@ -85,7 +85,7 @@ func TestAuditC3InterfaceField(t *testing.T) {
 		var dst dstI
 
 		assert.NotPanics(t, func() {
-			err := Copy(&dst, src)
+			err := Copy(src, &dst).Do()
 			assert.NoError(t, err)
 		})
 	})
@@ -96,7 +96,7 @@ func TestAuditC3InterfaceField(t *testing.T) {
 		src := srcI{Data: Address{City: "Beijing"}}
 		var dst dstI
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, Address{City: "Beijing"}, dst.Data)
 	})
@@ -130,7 +130,7 @@ func TestAuditC4CycleReference(t *testing.T) {
 
 		var dst auditNodeC4
 		assert.NotPanics(t, func() {
-			err := Copy(&dst, n)
+			err := Copy(n, &dst).Do()
 			assert.NoError(t, err)
 		})
 
@@ -152,7 +152,7 @@ func TestAuditC4CycleReference(t *testing.T) {
 
 		var dst auditAC4
 		assert.NotPanics(t, func() {
-			err := Copy(&dst, a)
+			err := Copy(a, &dst).Do()
 			assert.NoError(t, err)
 		})
 
@@ -197,9 +197,9 @@ func TestAuditC5MaxDepth(t *testing.T) {
 	src := L1{Name: "n1", Child: L2{Name: "n2", Child: L3{Name: "n3", Child: L4{Name: "n4", Child: L5{Name: "n5"}}}}}
 
 	dst := map[string]any{}
-	// 期望：深度超过 WithMaxDepth(3) 应返回错误（当前 struct→map 路径在
+	// 期望：深度超过 MaxDepth(3) 应返回错误（当前 struct→map 路径在
 	// deepCopy case reflect.Map 中无 ExceedMaxDepth 检查，逐层拷贝到底且无错 → FAIL）
-	err := Copy(&dst, src, WithMaxDepth(3))
+	err := Copy(src, &dst).MaxDepth(3).Do()
 	assert.Error(t, err)
 }
 
@@ -219,9 +219,9 @@ func TestAuditH1MapToStructOptions(t *testing.T) {
 	}
 	dst := PersonH{Name: "preset", Age: 42, Sex: "original"}
 
-	// 期望：WithIgnoreEmpty 使空值不覆盖目标非空字段；WithSkipFields("Sex") 使 Sex 不被拷贝。
+	// 期望：IgnoreEmpty 使空值不覆盖目标非空字段；SkipFields("Sex") 使 Sex 不被拷贝。
 	// 当前 map→struct 分支（copier.go:75-90）完全忽略这两个选项 → 全部被覆盖 → FAIL
-	err := Copy(&dst, m, WithIgnoreEmpty(), WithSkipFields("Sex"))
+	err := Copy(m, &dst).IgnoreEmpty().SkipFields("Sex").Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "preset", dst.Name)
 	assert.Equal(t, 42, dst.Age)
@@ -248,7 +248,7 @@ func TestAuditH2CanSetPanic(t *testing.T) {
 			}
 		}()
 
-		_ = Copy(&dst, src)
+		_ = Copy(src, &dst).Do()
 
 		// 匹配到未导出字段时应跳过：字段保持零值，未被写入
 		assert.Equal(t, "", dst.name)
@@ -266,14 +266,14 @@ func TestAuditM3TypeConvertStub(t *testing.T) {
 	dst := map[string]any{}
 
 	// 注册 string → time.Time 转换器（struct→map 路径）
-	err := Copy(&dst, src, WithConverters(TypeConverter{
+	err := Copy(src, &dst).Converters(TypeConverter{
 		FieldName: "CreatedAt",
 		SrcType:   "",
 		DstType:   time.Time{},
 		Fn: func(src any) (any, error) {
 			return time.Parse("2006-01-02 15:04:05", src.(string))
 		},
-	}))
+	}).Do()
 	assert.NoError(t, err)
 
 	// 期望：转换器生效，CreatedAt 转为 time.Time
@@ -295,7 +295,7 @@ func TestAuditM4TypeConvertMissing(t *testing.T) {
 		src := fsrc{N: 3.7}
 		var dst fdst
 
-		err := Copy(&dst, src, WithLenient())
+		err := Copy(src, &dst).Lenient().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 3, dst.N)
 	})
@@ -309,7 +309,7 @@ func TestAuditM4TypeConvertMissing(t *testing.T) {
 		src := ssrc{N: "42"}
 		var dst sdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 42, dst.N)
 	})
@@ -324,7 +324,7 @@ func TestAuditM4TypeConvertMissing(t *testing.T) {
 		src := bsrc{B: true}
 		var dst bdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "true", dst.B)
 	})
@@ -335,33 +335,26 @@ func TestAuditM4TypeConvertMissing(t *testing.T) {
 func TestAuditErrPaths(t *testing.T) {
 	t.Run("nil src", func(t *testing.T) {
 		var dst Person
-		err := Copy(&dst, nil)
+		err := Copy[*Person](nil, &dst).Do() // nil 字面量无法推断 S，显式指定
 		assert.Error(t, err)
 	})
 
 	t.Run("nil src pointer", func(t *testing.T) {
 		var dst Person
-		err := Copy(&dst, (*Person)(nil))
+		err := Copy((*Person)(nil), &dst).Do()
 		assert.Error(t, err)
 	})
 
 	t.Run("nil dst", func(t *testing.T) {
 		src := Person{Name: "x"}
-		err := Copy(nil, src)
-		assert.Error(t, err)
-	})
-
-	t.Run("non-addressable dst (value not pointer)", func(t *testing.T) {
-		src := Person{Name: "x"}
-		var dst Person
-		err := Copy(dst, src)
+		err := Copy[Person, Person](src, nil).Do() // nil dst 无法推断 R，显式指定
 		assert.Error(t, err)
 	})
 
 	t.Run("nil map dst auto init (map to map)", func(t *testing.T) {
 		src := map[string]any{"a": 1}
 		var dst map[string]any
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, src, dst)
 	})
@@ -374,7 +367,7 @@ func TestAuditL2IndirectSlice(t *testing.T) {
 	src := &data
 	var dst []byte
 
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("hello"), dst)
 
@@ -396,7 +389,7 @@ func TestAuditPositiveSliceNested(t *testing.T) {
 	src := OSrc{Items: []Inner{{Name: "a"}, {Name: "b"}}}
 	var dst ODst
 
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 
 	dst.Items[0].Name = "changed"
@@ -412,7 +405,7 @@ func TestAuditPositiveNestedMap(t *testing.T) {
 	}
 	to := map[string]any{}
 
-	err := Copy(&to, from)
+	err := Copy(from, &to).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, from, to)
 
@@ -445,7 +438,7 @@ func TestAuditN1InterfaceAssignError(t *testing.T) {
 		src := srcS{Data: "hello"}
 		var dst dstS
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.Error(t, err)
 		assert.Nil(t, dst.Data)
 	})
@@ -459,7 +452,7 @@ func TestAuditN1InterfaceAssignError(t *testing.T) {
 		src := srcP{Data: &s}
 		var dst dstP
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.Error(t, err)
 		assert.Nil(t, dst.Data)
 	})
@@ -472,7 +465,7 @@ func TestAuditN1InterfaceAssignError(t *testing.T) {
 		src := srcOK{Data: auditNamed{V: "world"}}
 		var dst dstOK
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "world", dst.Data.AuditName())
 	})
@@ -485,7 +478,7 @@ func TestAuditN1InterfaceAssignError(t *testing.T) {
 		src := srcI{Data: "hello"}
 		var dst dstI
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "hello", dst.Data)
 	})
@@ -512,7 +505,7 @@ func TestAuditN2ValueConverterOrder(t *testing.T) {
 		m := map[string]any{"Name": "", "Age": 30}
 		dst := personN2{Name: "preset", Age: 42}
 
-		err := Copy(&dst, m, WithIgnoreEmpty(), WithValueConverter(naConverter))
+		err := Copy(m, &dst).IgnoreEmpty().ValueConverter(naConverter).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "N/A", dst.Name) // 空值经转换器转为有意义值，不应被 ignoreEmpty 跳过
 		assert.Equal(t, 30, dst.Age)
@@ -531,7 +524,7 @@ func TestAuditN2ValueConverterOrder(t *testing.T) {
 		src := srcN2{Name: "", Age: 30}
 		var dst dstN2
 
-		err := Copy(&dst, src, WithIgnoreEmpty(), WithValueConverter(naConverter))
+		err := Copy(src, &dst).IgnoreEmpty().ValueConverter(naConverter).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "N/A", dst.Name)
 		assert.Equal(t, 30, dst.Age)
@@ -545,7 +538,7 @@ func TestAuditN2ValueConverterOrder(t *testing.T) {
 		src := srcN2{Name: ""}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithIgnoreEmpty(), WithValueConverter(naConverter))
+		err := Copy(src, &dst).IgnoreEmpty().ValueConverter(naConverter).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "N/A", dst["Name"])
 	})
@@ -560,7 +553,7 @@ func TestAuditN2ValueConverterOrder(t *testing.T) {
 		m := map[string]any{"Name": "", "Age": 30}
 		dst := personN2{Name: "preset", Age: 42}
 
-		err := Copy(&dst, m, WithIgnoreEmpty())
+		err := Copy(m, &dst).IgnoreEmpty().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "preset", dst.Name) // 空值被忽略，保留预设值
 		assert.Equal(t, 30, dst.Age)        // 非空值正常覆盖
@@ -578,30 +571,27 @@ func TestAuditN2TypeConvertValueConverterCombine(t *testing.T) {
 	dst := map[string]any{}
 
 	// struct->map 路径：TypeConvert 先转 string->int，valueConverter 再翻倍
-	err := Copy(&dst, src,
-		WithConverters(TypeConverter{
-			FieldName: "Count",
-			SrcType:   "",
-			DstType:   int(0),
-			Fn: func(src any) (any, error) {
-				return strconv.Atoi(src.(string))
-			},
-		}),
-		WithValueConverter(func(fieldName string, value any) any {
-			if fieldName == "Count" {
-				if n, ok := value.(int); ok {
-					return n * 2
-				}
+	err := Copy(src, &dst).Converters(TypeConverter{
+		FieldName: "Count",
+		SrcType:   "",
+		DstType:   int(0),
+		Fn: func(src any) (any, error) {
+			return strconv.Atoi(src.(string))
+		},
+	}).ValueConverter(func(fieldName string, value any) any {
+		if fieldName == "Count" {
+			if n, ok := value.(int); ok {
+				return n * 2
 			}
-			return value
-		}),
-	)
+		}
+		return value
+	}).Do()
 
 	assert.NoError(t, err)
 	assert.Equal(t, 10, dst["Count"])
 }
 
-// ============ oracle 建议：WithCaseSensitive + map->struct 组合 ============
+// ============ oracle 建议：CaseSensitive + map->struct 组合 ============
 
 func TestAuditN2CaseSensitiveMapToStruct(t *testing.T) {
 	type personCS struct {
@@ -612,7 +602,7 @@ func TestAuditN2CaseSensitiveMapToStruct(t *testing.T) {
 		m := map[string]any{"Name": "John"}
 		var dst personCS
 
-		err := Copy(&dst, m, WithCaseSensitive())
+		err := Copy(m, &dst).CaseSensitive().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "John", dst.Name)
 	})
@@ -621,7 +611,7 @@ func TestAuditN2CaseSensitiveMapToStruct(t *testing.T) {
 		m := map[string]any{"name": "John"}
 		dst := personCS{Name: "preset"}
 
-		err := Copy(&dst, m, WithCaseSensitive())
+		err := Copy(m, &dst).CaseSensitive().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "preset", dst.Name) // 大小写不敏感匹配被关闭，name 不匹配 Name
 	})
@@ -630,7 +620,7 @@ func TestAuditN2CaseSensitiveMapToStruct(t *testing.T) {
 		m := map[string]any{"name": "John"}
 		var dst personCS
 
-		err := Copy(&dst, m)
+		err := Copy(m, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "John", dst.Name)
 	})
@@ -646,7 +636,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := ssrc{Flag: "true"}
 		var dst sdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, true, dst.Flag)
 	})
@@ -658,7 +648,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := ssrc{Flag: "false"}
 		var dst sdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, false, dst.Flag)
 	})
@@ -670,7 +660,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := bsrc{A: true}
 		var dst bdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 1, dst.A)
 	})
@@ -682,7 +672,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := bsrc{A: false}
 		var dst bdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), dst.A)
 	})
@@ -694,7 +684,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := bsrc{A: true}
 		var dst bdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, uint(1), dst.A)
 	})
@@ -706,7 +696,7 @@ func TestAuditN3BoolCrossType(t *testing.T) {
 		src := bsrc{A: true}
 		var dst bdst
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, float64(1), dst.A)
 	})
@@ -724,14 +714,14 @@ func TestAuditN3TypeConvertDstTypeBoundary(t *testing.T) {
 		dst := map[string]any{}
 
 		// 声明 DstType 为 int，但 Fn 实际返回 string → 转换不生效，保留原值
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "Count",
 			SrcType:   "",
 			DstType:   int(0),
 			Fn: func(src any) (any, error) {
 				return src.(string) + "!", nil
 			},
-		}))
+		}).Do()
 
 		assert.NoError(t, err)
 		assert.Equal(t, "5", dst["Count"])
@@ -741,23 +731,23 @@ func TestAuditN3TypeConvertDstTypeBoundary(t *testing.T) {
 		src := Order{Count: "5"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "Count",
 			SrcType:   "",
 			DstType:   int(0),
 			Fn: func(src any) (any, error) {
 				return strconv.Atoi(src.(string))
 			},
-		}))
+		}).Do()
 
 		assert.NoError(t, err)
 		assert.Equal(t, 5, dst["Count"])
 	})
 }
 
-// ============ N-4 WithMust() 声明未实现 ============
+// ============ N-4 MustFields() 声明未实现 ============
 
-func TestAuditN4WithMust(t *testing.T) {
+func TestAuditN4MustFields(t *testing.T) {
 	type srcM struct {
 		Name string `copier:"must"`
 		Age  int
@@ -774,19 +764,19 @@ func TestAuditN4WithMust(t *testing.T) {
 	t.Run("only must fields copied", func(t *testing.T) {
 		var dst dstM
 
-		err := Copy(&dst, src, WithMust())
+		err := Copy(src, &dst).MustFields().Do()
 		assert.NoError(t, err)
-		assert.Equal(t, "John", dst.Name)    // must 字段被拷贝
-		assert.Equal(t, 0, dst.Age)          // 非 must 字段不被拷贝
-		assert.Equal(t, "Male", dst.Gender)  // must+toname 组合生效
+		assert.Equal(t, "John", dst.Name)   // must 字段被拷贝
+		assert.Equal(t, 0, dst.Age)         // 非 must 字段不被拷贝
+		assert.Equal(t, "Male", dst.Gender) // must+toname 组合生效
 	})
 
-	t.Run("must tag no effect without WithMust", func(t *testing.T) {
+	t.Run("must tag no effect without MustFields", func(t *testing.T) {
 		var dst dstM
 
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
-		assert.Equal(t, "John", dst.Name)   // toname 仍生效
+		assert.Equal(t, "John", dst.Name) // toname 仍生效
 		assert.Equal(t, 30, dst.Age)
 		assert.Equal(t, "Male", dst.Gender)
 	})
@@ -794,7 +784,7 @@ func TestAuditN4WithMust(t *testing.T) {
 	t.Run("struct to map with must", func(t *testing.T) {
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMust())
+		err := Copy(src, &dst).MustFields().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "John", dst["Name"])
 		assert.Equal(t, "Male", dst["Gender"])
@@ -815,7 +805,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"meta": map[string]any{"a": 1}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["meta"].(map[string]any)["a"] = 999
 		assert.Equal(t, 1, from["meta"].(map[string]any)["a"])
@@ -825,7 +815,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"list": []int{1, 2, 3}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["list"].([]int)[0] = 999
 		assert.Equal(t, 1, from["list"].([]int)[0])
@@ -835,7 +825,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"ptr": &auditPtrVal{Name: "a"}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["ptr"].(*auditPtrVal).Name = "changed"
 		assert.Equal(t, "a", from["ptr"].(*auditPtrVal).Name)
@@ -846,7 +836,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"list": []any{map[string]any{"a": 1}}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["list"].([]any)[0].(map[string]any)["a"] = 999
 		assert.Equal(t, 1, from["list"].([]any)[0].(map[string]any)["a"])
@@ -862,7 +852,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		// 全层级修改
 		to["a"].(map[string]any)["x"] = "new"
@@ -879,7 +869,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		to := map[string]any{}
 
 		assert.NotPanics(t, func() {
-			err := Copy(&to, from)
+			err := Copy(from, &to).Do()
 			assert.NoError(t, err)
 		})
 
@@ -891,7 +881,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"m": map[string]any{}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["m"].(map[string]any)["new"] = 1
 		_, hasNew := from["m"].(map[string]any)["new"]
@@ -902,17 +892,17 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		var to map[string]any
 		from := map[string]any{"a": 1}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 		assert.NotNil(t, to)
 		assert.Equal(t, from, to)
 	})
 
 	t.Run("with MaxDepth option", func(t *testing.T) {
-		// 顶层之下 3 层 map 嵌套，WithMaxDepth(2) 时第 3 层（depth=3）超限
+		// 顶层之下 3 层 map 嵌套，MaxDepth(2) 时第 3 层（depth=3）超限
 		from := map[string]any{"a": map[string]any{"b": map[string]any{"c": map[string]any{"d": 1}}}}
 		to := map[string]any{}
 
-		err := Copy(&to, from, WithMaxDepth(2))
+		err := Copy(from, &to).MaxDepth(2).Do()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
@@ -926,7 +916,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 		assert.Equal(t, from, to)
 
 		// 修改后全部隔离
@@ -942,7 +932,7 @@ func TestAuditLR1MapDeepCopyIsolation(t *testing.T) {
 		from := map[string]any{"data": []byte("hello")}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["data"].([]byte)[0] = 'X'
 		assert.Equal(t, byte('h'), from["data"].([]byte)[0])
@@ -956,7 +946,7 @@ func TestAuditP2KeyTypeIncompatible(t *testing.T) {
 		from := map[int]string{1: "a"}
 		to := map[string]string{}
 
-		err := Copy(&to, from)
+		err := Copy(from, &to).Do()
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrInvalidCopyDestination)
 	})
@@ -965,7 +955,7 @@ func TestAuditP2KeyTypeIncompatible(t *testing.T) {
 		from := map[int]string{1: "a"}
 		to := map[string]string{"preset": "keep"}
 
-		err := Copy(&to, from)
+		err := Copy(from, &to).Do()
 		assert.Error(t, err)
 		// 报错时 dst 不得被静默清空
 		assert.Equal(t, "keep", to["preset"])
@@ -975,7 +965,7 @@ func TestAuditP2KeyTypeIncompatible(t *testing.T) {
 		from := map[string]any{"a": 1}
 		to := map[string]any{}
 
-		err := Copy(&to, from)
+		err := Copy(from, &to).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, from, to)
 	})
@@ -984,7 +974,7 @@ func TestAuditP2KeyTypeIncompatible(t *testing.T) {
 		from := map[string]int{"a": 1}
 		to := map[string]any{}
 
-		err := Copy(&to, from)
+		err := Copy(from, &to).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 1, to["a"])
 	})
@@ -1010,7 +1000,7 @@ func TestAuditP3StructValuePointerSharing(t *testing.T) {
 		}
 		to := map[string]auditP3Outer{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["a"].Ptr.Name = "changed"
 		assert.Equal(t, "changed", from["a"].Ptr.Name) // 同步变化 = 共享是预期行为
@@ -1023,7 +1013,7 @@ func TestAuditP3StructValuePointerSharing(t *testing.T) {
 		}
 		to := map[string]*auditP3Outer{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 
 		to["a"].Ptr.Name = "changed"
 		assert.Equal(t, "original", from["a"].Ptr.Name) // 隔离，src 不变

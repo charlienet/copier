@@ -31,7 +31,7 @@ func BenchmarkCopyStruct(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -47,7 +47,7 @@ func BenchmarkCopyMap(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var dst map[string]any
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -64,13 +64,13 @@ func BenchmarkCopyNestedMap(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var dst map[string]any
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkCopyWithOptions 带 WithSkipFields + WithConverters 的组合选项。
+// BenchmarkCopyWithOptions 带 SkipFields + Converters 的组合选项。
 func BenchmarkCopyWithOptions(b *testing.B) {
 	src := map[string]any{
 		"Name": "John", "Age": 30, "Score": int64(100), "Level": uint8(3),
@@ -79,17 +79,14 @@ func BenchmarkCopyWithOptions(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var dst benchMedium
-		if err := Copy(&dst, src,
-			WithSkipFields("Score"),
-			WithConverters(TypeConverter{
-				FieldName: "Name",
-				SrcType:   "",
-				DstType:   "",
-				Fn: func(src any) (any, error) {
-					return src, nil
-				},
-			}),
-		); err != nil {
+		if err := Copy(src, &dst).SkipFields("Score").Converters(TypeConverter{
+			FieldName: "Name",
+			SrcType:   "",
+			DstType:   "",
+			Fn: func(src any) (any, error) {
+				return src, nil
+			},
+		}).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -106,7 +103,7 @@ func BenchmarkCopyStructToMap(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var dst map[string]any
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -126,13 +123,13 @@ func BenchmarkCopyMapToStruct(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var dst benchMedium
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkCopyStructStrict struct→struct 开启 WithStrict（strict 不进 plan 键，
+// BenchmarkCopyStructStrict struct→struct 默认严格模式（strict 不进 plan 键，
 // 仍走 plan 缓存路径，运行时叠加精度检查）。对比 BenchmarkCopyStruct 确认无退化。
 func BenchmarkCopyStructStrict(b *testing.B) {
 	src := benchMedium{
@@ -144,7 +141,7 @@ func BenchmarkCopyStructStrict(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if err := Copy(&dst, src, WithStrict()); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -161,7 +158,7 @@ func BenchmarkCopyStructWithPlanCache(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if err := Copy(&dst, src); err != nil {
+		if err := Copy(src, &dst).Do(); err != nil {
 			b.Fatal(err)
 		}
 	}

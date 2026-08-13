@@ -50,7 +50,7 @@ func BenchmarkStructSameType(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			var dst benchMedium
-			if err := localcopier.Copy(&dst, src); err != nil {
+			if err := localcopier.Copy(src, &dst).Do(); err != nil {
 				b.Fatal(err)
 			}
 			sink = dst
@@ -122,7 +122,7 @@ func BenchmarkStructCrossType(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			var dst benchUserDTO
-			if err := localcopier.Copy(&dst, src); err != nil {
+			if err := localcopier.Copy(src, &dst).Do(); err != nil {
 				b.Fatal(err)
 			}
 			sink = dst
@@ -195,7 +195,7 @@ func BenchmarkStructNested(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			var dst benchComplex
-			if err := localcopier.Copy(&dst, src); err != nil {
+			if err := localcopier.Copy(src, &dst).Do(); err != nil {
 				b.Fatal(err)
 			}
 			sink = dst

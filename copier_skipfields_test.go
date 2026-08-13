@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWithSkipFields(t *testing.T) {
+func TestSkipFields(t *testing.T) {
 	type Person struct {
 		Name string
 		Age  int
@@ -16,14 +16,14 @@ func TestWithSkipFields(t *testing.T) {
 	src := Person{Name: "John", Age: 30, Sex: "Male"}
 	var dst Person
 
-	err := Copy(&dst, src, WithSkipFields("Sex"))
+	err := Copy(src, &dst).SkipFields("Sex").Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "John", dst.Name)
 	assert.Equal(t, 30, dst.Age)
 	assert.Equal(t, "", dst.Sex) // Sex 应该被跳过
 }
 
-func TestWithSkipFields_Multiple(t *testing.T) {
+func TestSkipFieldsMultiple(t *testing.T) {
 	type Person struct {
 		Name    string
 		Age     int
@@ -34,7 +34,7 @@ func TestWithSkipFields_Multiple(t *testing.T) {
 	src := Person{Name: "John", Age: 30, Sex: "Male", Address: "Beijing"}
 	var dst Person
 
-	err := Copy(&dst, src, WithSkipFields("Sex", "Address"))
+	err := Copy(src, &dst).SkipFields("Sex", "Address").Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "John", dst.Name)
 	assert.Equal(t, 30, dst.Age)
@@ -42,7 +42,7 @@ func TestWithSkipFields_Multiple(t *testing.T) {
 	assert.Equal(t, "", dst.Address)
 }
 
-func TestWithValueConverter(t *testing.T) {
+func TestValueConverter(t *testing.T) {
 	type Person struct {
 		Name string
 		Age  int
@@ -52,21 +52,21 @@ func TestWithValueConverter(t *testing.T) {
 	var dst Person
 
 	// 将名字转换为大写
-	err := Copy(&dst, src, WithValueConverter(func(fieldName string, value any) any {
+	err := Copy(src, &dst).ValueConverter(func(fieldName string, value any) any {
 		if fieldName == "Name" {
 			if s, ok := value.(string); ok {
 				return "Mr. " + s
 			}
 		}
 		return value
-	}))
+	}).Do()
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Mr. john", dst.Name)
 	assert.Equal(t, 30, dst.Age)
 }
 
-func TestWithValueConverter_StructToMap(t *testing.T) {
+func TestValueConverter_StructToMap(t *testing.T) {
 	type Person struct {
 		Name string
 		Age  int
@@ -75,21 +75,21 @@ func TestWithValueConverter_StructToMap(t *testing.T) {
 	src := Person{Name: "John", Age: 30}
 	dst := make(map[string]any)
 
-	err := Copy(&dst, src, WithValueConverter(func(fieldName string, value any) any {
+	err := Copy(src, &dst).ValueConverter(func(fieldName string, value any) any {
 		if fieldName == "Age" {
 			if age, ok := value.(int); ok {
 				return age + 1 // 年龄加1
 			}
 		}
 		return value
-	}))
+	}).Do()
 
 	assert.NoError(t, err)
 	assert.Equal(t, "John", dst["Name"])
 	assert.Equal(t, 31, dst["Age"]) // 应该是31
 }
 
-func TestWithSkipFields_StructToMap(t *testing.T) {
+func TestSkipFields_StructToMap(t *testing.T) {
 	type Person struct {
 		Name    string
 		Age     int
@@ -100,7 +100,7 @@ func TestWithSkipFields_StructToMap(t *testing.T) {
 	src := Person{Name: "John", Age: 30, Sex: "Male", Address: "Beijing"}
 	dst := make(map[string]any)
 
-	err := Copy(&dst, src, WithSkipFields("Sex", "Address"))
+	err := Copy(src, &dst).SkipFields("Sex", "Address").Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "John", dst["Name"])
 	assert.Equal(t, 30, dst["Age"])
@@ -121,17 +121,14 @@ func TestCombinedOptions(t *testing.T) {
 	src := Person{Name: "john", Age: 30, Sex: "Male", Address: "Beijing"}
 	var dst Person
 
-	err := Copy(&dst, src,
-		WithSkipFields("Address"),
-		WithValueConverter(func(fieldName string, value any) any {
-			if fieldName == "Name" {
-				if s, ok := value.(string); ok {
-					return "Mr. " + s
-				}
+	err := Copy(src, &dst).SkipFields("Address").ValueConverter(func(fieldName string, value any) any {
+		if fieldName == "Name" {
+			if s, ok := value.(string); ok {
+				return "Mr. " + s
 			}
-			return value
-		}),
-	)
+		}
+		return value
+	}).Do()
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Mr. john", dst.Name)

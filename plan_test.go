@@ -8,6 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// testOpt 测试辅助：按字段修改函数构造 options（v0.3 起 With* 选项已删除，
+// 链式 API 面向外部用户，测试内部直接构造 options 副本）。
+func testOpt(fns ...func(*options)) *options {
+	opt := *DefaultOptions
+	for _, fn := range fns {
+		fn(&opt)
+	}
+	return &opt
+}
+
 // planSrc：含普通字段、tag- 忽略字段、toname 重命名字段、无对应 dst 的字段
 type planSrc struct {
 	Name    string
@@ -27,25 +37,25 @@ type planDst struct {
 
 func TestPlanEligible(t *testing.T) {
 	// 默认配置 → eligible
-	assert.True(t, planEligible(getOpt()))
+	assert.True(t, planEligible(testOpt()))
 	assert.True(t, planEligible(DefaultOptions))
 
 	// 非匹配类选项不参与判定（运行时值/闭包处理，不影响字段匹配 plan）
-	assert.True(t, planEligible(getOpt(WithIgnoreEmpty())))
-	assert.True(t, planEligible(getOpt(WithMaxDepth(3))))
-	assert.True(t, planEligible(getOpt(WithMethodMapping())))
-	assert.True(t, planEligible(getOpt(WithConverters(TypeConverter{FieldName: "Age"}))))
-	assert.True(t, planEligible(getOpt(WithValueConverter(func(string, any) any { return nil }))))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.ignoreEmpty = true })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.maxDepth = 3 })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.methodMapping = true })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.converters = []TypeConverter{TypeConverter{FieldName: "Age"}} })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.valueConverter = func(string, any) any { return nil } })))
 
 	// 标量选项（caseSensitive/tagName/must）已进键，仍可走缓存
-	assert.True(t, planEligible(getOpt(WithCaseSensitive())))
-	assert.True(t, planEligible(getOpt(WithTagName("json"))))
-	assert.True(t, planEligible(getOpt(WithMust())))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.caseSensitive = true })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.tagName = "json" })))
+	assert.True(t, planEligible(testOpt(func(o *options) { o.must = true })))
 
 	// 内容型选项（第三步才做）非空 → 不 eligible
-	assert.False(t, planEligible(getOpt(WithNameFn(func(s string) string { return s }))))
-	assert.False(t, planEligible(getOpt(WithNameMapping(map[string]string{"a": "b"}))))
-	assert.False(t, planEligible(getOpt(WithSkipFields("Name"))))
+	assert.False(t, planEligible(testOpt(func(o *options) { o.nameConverter = func(s string) string { return s } })))
+	assert.False(t, planEligible(testOpt(func(o *options) { o.fieldNameMapping = map[string]string{"a": "b"} })))
+	assert.False(t, planEligible(testOpt(func(o *options) { o.skipFields = []string{"Name"} })))
 }
 
 // ============ 缓存命中：同 (srcType, dstType) 复用同一 plan ============
@@ -66,9 +76,9 @@ func TestGetStructPlanNotEligible(t *testing.T) {
 	srcT := reflect.TypeOf(planSrc{})
 	dstT := reflect.TypeOf(planDst{})
 
-	assert.Nil(t, getStructPlan(srcT, dstT, getOpt(WithNameFn(func(s string) string { return s }))))
-	assert.Nil(t, getStructPlan(srcT, dstT, getOpt(WithNameMapping(map[string]string{"a": "b"}))))
-	assert.Nil(t, getStructPlan(srcT, dstT, getOpt(WithSkipFields("Name"))))
+	assert.Nil(t, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.nameConverter = func(s string) string { return s } })))
+	assert.Nil(t, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.fieldNameMapping = map[string]string{"a": "b"} })))
+	assert.Nil(t, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.skipFields = []string{"Name"} })))
 }
 
 // ============ 标量选项进键：不同 planOpts 产生不同缓存键 ============
@@ -77,19 +87,19 @@ func TestPlanOptsDistinctKeys(t *testing.T) {
 	srcT := reflect.TypeOf(planSrc{})
 	dstT := reflect.TypeOf(planDst{})
 
-	pDefault := getStructPlan(srcT, dstT, getOpt())
-	pCase := getStructPlan(srcT, dstT, getOpt(WithCaseSensitive()))
-	pTag := getStructPlan(srcT, dstT, getOpt(WithTagName("json")))
-	pMust := getStructPlan(srcT, dstT, getOpt(WithMust()))
+	pDefault := getStructPlan(srcT, dstT, testOpt())
+	pCase := getStructPlan(srcT, dstT, testOpt(func(o *options) { o.caseSensitive = true }))
+	pTag := getStructPlan(srcT, dstT, testOpt(func(o *options) { o.tagName = "json" }))
+	pMust := getStructPlan(srcT, dstT, testOpt(func(o *options) { o.must = true }))
 
 	assert.NotSame(t, pDefault, pCase)
 	assert.NotSame(t, pDefault, pTag)
 	assert.NotSame(t, pDefault, pMust)
 
 	// 相同 opts 命中同一缓存实例
-	assert.Same(t, pCase, getStructPlan(srcT, dstT, getOpt(WithCaseSensitive())))
-	assert.Same(t, pTag, getStructPlan(srcT, dstT, getOpt(WithTagName("json"))))
-	assert.Same(t, pMust, getStructPlan(srcT, dstT, getOpt(WithMust())))
+	assert.Same(t, pCase, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.caseSensitive = true })))
+	assert.Same(t, pTag, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.tagName = "json" })))
+	assert.Same(t, pMust, getStructPlan(srcT, dstT, testOpt(func(o *options) { o.must = true })))
 }
 
 // ============ buildStructPlan 内容 ============
@@ -150,14 +160,14 @@ func TestPlanEquivalence(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		var dst planDst
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, planDst{Name: "n", Age: 7, Target: "r"}, dst)
 	})
 
 	t.Run("with ignoreEmpty skips zero fields", func(t *testing.T) {
 		var dst planDst
-		err := Copy(&dst, planSrc{Name: "n"}, WithIgnoreEmpty())
+		err := Copy(planSrc{Name: "n"}, &dst).IgnoreEmpty().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, planDst{Name: "n"}, dst)
 	})
@@ -165,7 +175,7 @@ func TestPlanEquivalence(t *testing.T) {
 	t.Run("with maxDepth respects nested limit", func(t *testing.T) {
 		// plan 路径 deepCopyInner 同样受深度限制约束
 		var dst planNestedDst
-		err := Copy(&dst, planNestedSrc{Inner: planNestedInner{N: 5}}, WithMaxDepth(0))
+		err := Copy(planNestedSrc{Inner: planNestedInner{N: 5}}, &dst).MaxDepth(0).Do()
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, ErrMaxDepthExceeded))
 	})
@@ -174,7 +184,7 @@ func TestPlanEquivalence(t *testing.T) {
 		// 既有行为：struct→struct 不调用 TypeConvert，结果与默认一致
 		fnCalled := false
 		var dst planDst
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "Age",
 			SrcType:   int(0),
 			DstType:   int64(0),
@@ -182,7 +192,7 @@ func TestPlanEquivalence(t *testing.T) {
 				fnCalled = true
 				return int64(src.(int) * 10), nil
 			},
-		}))
+		}).Do()
 		assert.NoError(t, err)
 		assert.False(t, fnCalled)
 		assert.Equal(t, planDst{Name: "n", Age: 7, Target: "r"}, dst)
@@ -191,10 +201,10 @@ func TestPlanEquivalence(t *testing.T) {
 	t.Run("with valueConverter receives src original field names", func(t *testing.T) {
 		called := map[string]bool{}
 		var dst planDst
-		err := Copy(&dst, src, WithValueConverter(func(name string, v any) any {
+		err := Copy(src, &dst).ValueConverter(func(name string, v any) any {
 			called[name] = true
 			return v
-		}))
+		}).Do()
 		assert.NoError(t, err)
 		// toname 字段 Renamed 的回调使用 src 原始名，而非转换后名
 		assert.True(t, called["Name"])
@@ -206,7 +216,7 @@ func TestPlanEquivalence(t *testing.T) {
 	})
 }
 
-// ============ 关键回归：WithMethodMapping + 默认字段配置（plan 路径 setter/getter 仍生效） ============
+// ============ 关键回归：MethodMapping + 默认字段配置（plan 路径 setter/getter 仍生效） ============
 
 type planMMSrc struct{ Name string }
 
@@ -224,17 +234,17 @@ type planGettersDst struct{ Title string }
 
 func TestPlanWithMethodMapping(t *testing.T) {
 	t.Run("setter works on plan path", func(t *testing.T) {
-		// planEligible(WithMethodMapping())==true → 走 plan 路径；
+		// planEligible(MethodMapping 选项)==true → 走 plan 路径；
 		// src.Name 在 dst 无字段匹配（dstIdx 空）→ callSetter 降级
 		var dst planMMDst
-		err := Copy(&dst, planMMSrc{Name: "x"}, WithMethodMapping())
+		err := Copy(planMMSrc{Name: "x"}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst.Stored)
 	})
 
 	t.Run("getter works on plan path", func(t *testing.T) {
 		var dst planGettersDst
-		err := Copy(&dst, &planGettersSrc{}, WithMethodMapping())
+		err := Copy(&planGettersSrc{}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "t", dst.Title)
 	})
@@ -247,14 +257,14 @@ func TestPlanNonEligiblePaths(t *testing.T) {
 
 	t.Run("case sensitive", func(t *testing.T) {
 		var dst planDst
-		err := Copy(&dst, src, WithCaseSensitive())
+		err := Copy(src, &dst).CaseSensitive().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, planDst{Name: "n", Age: 7, Target: "r"}, dst)
 	})
 
 	t.Run("skip fields", func(t *testing.T) {
 		var dst planDst
-		err := Copy(&dst, src, WithSkipFields("Name"))
+		err := Copy(src, &dst).SkipFields("Name").Do()
 		assert.NoError(t, err)
 		assert.Equal(t, planDst{Age: 7, Target: "r"}, dst)
 	})
@@ -269,7 +279,7 @@ func TestPlanNonEligiblePaths(t *testing.T) {
 			Age  int
 		}
 		var dst mustDst
-		err := Copy(&dst, mustSrc{Name: "m", Age: 1}, WithMust())
+		err := Copy(mustSrc{Name: "m", Age: 1}, &dst).MustFields().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, mustDst{Name: "m"}, dst) // 仅 must 字段被拷贝
 	})

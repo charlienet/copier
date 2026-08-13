@@ -31,7 +31,7 @@ func TestIfaceContainerMapToStruct(t *testing.T) {
 	}
 
 	var dst ifcContainerDst
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, dst.Tags)
 	assert.Equal(t, map[string]string{"k": "v"}, dst.Meta)
@@ -60,7 +60,7 @@ func TestIfaceNilValueZeroed(t *testing.T) {
 	dst := ifcNilDst{Inner: ifcInner{N: 5}, Name: "keep"}
 	src := map[string]any{"Inner": nil, "Name": nil}
 
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	// nil interface 值：dst 可写时置零（修复前嵌套 struct 字段返回 ErrNotSupported）
 	assert.Equal(t, ifcInner{}, dst.Inner)
@@ -77,7 +77,7 @@ func TestIfaceStructToStructContainer(t *testing.T) {
 	src := ifcStructSrc{Tags: []string{"a", "b"}}
 
 	var dst ifcStructDst
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, dst.Tags)
 
@@ -94,7 +94,7 @@ func TestIfaceNestedInterface(t *testing.T) {
 
 	src := map[string]any{"Tags": outer}
 	var dst ifcContainerDst
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"x", "y"}, dst.Tags)
 }
@@ -108,7 +108,7 @@ func TestIfaceMapToMapRegression(t *testing.T) {
 	}
 
 	var dst map[string]any
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, map[string]any{"b": []int{1, 2}}, dst["a"])
 	assert.Equal(t, []string{"x"}, dst["c"])
@@ -136,7 +136,7 @@ func TestIfaceScalarConversions(t *testing.T) {
 	}
 
 	var dst ifcScalarDst
-	err := Copy(&dst, src)
+	err := Copy(src, &dst).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, 42, dst.Age)
 	assert.Equal(t, "100", dst.Num)

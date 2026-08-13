@@ -23,7 +23,7 @@ func TestFieldPathStructToStruct(t *testing.T) {
 	src := fpSrc{Title: "abc"}
 	var dst fpDst
 
-	err := Copy(&dst, src, WithStrict())
+	err := Copy(src, &dst).Do()
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 	assert.Contains(t, err.Error(), "Title:") // 字段路径前缀
 }
@@ -33,7 +33,7 @@ func TestFieldPathLegacyPath(t *testing.T) {
 	src := fpSrc{Title: "abc"}
 	var dst fpDst
 
-	err := Copy(&dst, src, WithStrict(), WithSkipFields("__none__"))
+	err := Copy(src, &dst).SkipFields("__none__").Do()
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 	assert.Contains(t, err.Error(), "Title:")
 }
@@ -50,7 +50,7 @@ func TestFieldPathNested(t *testing.T) {
 	src := outerSrc{Inner: fpSrc{Title: "abc"}}
 	var dst outerDst
 
-	err := Copy(&dst, src, WithStrict())
+	err := Copy(src, &dst).Do()
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 	msg := err.Error()
 	assert.Contains(t, msg, "Inner:")
@@ -62,7 +62,7 @@ func TestFieldPathMapToStruct(t *testing.T) {
 	src := map[string]any{"Title": "abc"}
 	var dst fpDst
 
-	err := Copy(&dst, src, WithStrict())
+	err := Copy(src, &dst).Do()
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 	assert.Contains(t, err.Error(), "Title:")
 }
@@ -73,7 +73,7 @@ func TestFieldPathFormat(t *testing.T) {
 	src := fpSrc{Title: "abc"}
 	var dst fpDst
 
-	err := Copy(&dst, src, WithStrict())
+	err := Copy(src, &dst).Do()
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 	msg := err.Error()
 	assert.True(t, strings.HasPrefix(msg, "Title:"))

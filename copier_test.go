@@ -32,13 +32,13 @@ func TestNameConverter(t *testing.T) {
 
 	m2 := map[string]any{}
 
-	if err := Copy(&m2, m1, WithNameFn(func(s string) string {
+	if err := Copy(m1, &m2).NameFn(func(s string) string {
 		if s == "Name" {
 			return "ssssssssssssssss"
 		}
 
 		return s
-	})); err != nil {
+	}).Do(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,7 +52,7 @@ func TestCopy(t *testing.T) {
 	}
 
 	var dst Person
-	assert.NoError(t, Copy(&dst, src))
+	assert.NoError(t, Copy(src, &dst).Do())
 	assert.Equal(t, src, dst)
 }
 
@@ -67,7 +67,7 @@ func TestStructToStruct(t *testing.T) {
 
 			d := dst{}
 			s := src{id: 3, name: "name"}
-			err := Copy(&d, s)
+			err := Copy(s, &d).Do()
 			return testCasse{err: err}
 		}(),
 		// func() testCasse {
@@ -86,7 +86,7 @@ func TestStructToStruct(t *testing.T) {
 
 		// 	var d dst
 		// 	s := src{core: core{ID: 3, Name: "name"}}
-		// 	err := Copy(&d, &s)
+		// 	err := Copy(&s, &d).Do()
 		// 	return testCasse{got: d, actual: s, err: err}
 		// }(),
 	} {
@@ -100,7 +100,7 @@ func TestStructToStruct(t *testing.T) {
 		Age:  10,
 	}
 
-	if err := Copy(&dst, src); err != nil {
+	if err := Copy(src, &dst).Do(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +115,7 @@ func TestSrcDoublePtr(t *testing.T) {
 	m1Ptr := &m1
 	var m2 Person
 
-	if err := Copy(&m2, &m1Ptr); err != nil {
+	if err := Copy(&m1Ptr, &m2).Do(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +134,7 @@ func TestConvertibleTo(t *testing.T) {
 	src := p1{Age: 10}
 	dst := p2{}
 
-	if err := Copy(&dst, src); err != nil {
+	if err := Copy(src, &dst).Do(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,7 +147,7 @@ func TestSlice(t *testing.T) {
 			src := []int{1, 2, 3}
 			var dst []int
 
-			err := Copy(&dst, src)
+			err := Copy(src, &dst).Do()
 			return testCasse{got: dst, actual: src, err: err}
 		}(),
 		func() testCasse {
@@ -165,7 +165,7 @@ func TestSlice(t *testing.T) {
 			var need dst
 			need.A = [3]int{1, 2, 3}
 
-			err := Copy(&d, s)
+			err := Copy(s, &d).Do()
 			return testCasse{got: d, actual: need, err: err}
 		}(),
 	} {
@@ -190,7 +190,7 @@ func TestTime(t *testing.T) {
 	var t1 testCaseWithTime1
 	t2 := testCaseWithTime2{T1: time.Now(), I: 3}
 
-	err := Copy(&t1, &t2)
+	err := Copy(&t2, &t1).Do()
 	assert.NoError(t, err)
 	assert.Equal(t, t1.T1, t2.T1)
 	assert.Equal(t, t1.I, t2.I)
@@ -211,7 +211,7 @@ func TestAnonymnousFields(t *testing.T) {
 		from := parentA{nested: &nested{A: "a"}}
 		to := parentB{}
 
-		err := Copy(&to, &from)
+		err := Copy(&from, &to).Do()
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 			return

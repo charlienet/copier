@@ -16,16 +16,18 @@ func TestNameConvertFn(t *testing.T) {
 		return strings.ToUpper(s[:1]) + s[1:]
 	}
 
-	opt := getOpt(WithNameFn(camel2Pascal))
+	opt := testOpt(func(o *options) { o.nameConverter = camel2Pascal })
 	r := opt.NameConvert("test")
 
 	assert.Equal(t, "Test", r)
 }
 
 func TestNameMapping(t *testing.T) {
-	opt := getOpt(WithNameMapping(map[string]string{
-		"test": "Test1111111",
-	}))
+	opt := testOpt(func(o *options) {
+		o.fieldNameMapping = map[string]string{
+			"test": "Test1111111",
+		}
+	})
 
 	r := opt.NameConvert("test")
 	assert.Equal(t, "Test1111111", r)

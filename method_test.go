@@ -17,7 +17,7 @@ type mmGetterDst struct{ Name string }
 
 func TestMethodMappingGetterBasic(t *testing.T) {
 	var dst mmGetterDst
-	err := Copy(&dst, &mmGetterSrc{}, WithMethodMapping())
+	err := Copy(&mmGetterSrc{}, &dst).MethodMapping().Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "hello", dst.Name)
 }
@@ -37,14 +37,14 @@ func (s *mmGetterFailSrc) Data() (string, error) { return "", errors.New("boom")
 func TestMethodMappingGetterWithError(t *testing.T) {
 	t.Run("nil error writes value", func(t *testing.T) {
 		var dst mmGetterErrDst
-		err := Copy(&dst, &mmGetterErrSrc{}, WithMethodMapping())
+		err := Copy(&mmGetterErrSrc{}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "ok", dst.Data)
 	})
 
 	t.Run("non-nil error returns ErrMethodReturnError", func(t *testing.T) {
 		var dst mmGetterErrDst
-		err := Copy(&dst, &mmGetterFailSrc{}, WithMethodMapping())
+		err := Copy(&mmGetterFailSrc{}, &dst).MethodMapping().Do()
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, ErrMethodReturnError))
 	})
@@ -60,7 +60,7 @@ type mmConvDst struct{ Count string }
 
 func TestMethodMappingGetterTypeConversion(t *testing.T) {
 	var dst mmConvDst
-	err := Copy(&dst, &mmConvSrc{}, WithMethodMapping())
+	err := Copy(&mmConvSrc{}, &dst).MethodMapping().Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "42", dst.Count)
 }
@@ -88,14 +88,14 @@ func (d *mmSetterErrDst) Name(v string) error {
 func TestMethodMappingSetter(t *testing.T) {
 	t.Run("setter without return", func(t *testing.T) {
 		var dst mmSetterDst
-		err := Copy(&dst, mmSetterSrc{Name: "x"}, WithMethodMapping())
+		err := Copy(mmSetterSrc{Name: "x"}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst.Stored)
 	})
 
 	t.Run("setter returning error", func(t *testing.T) {
 		var dst mmSetterErrDst
-		err := Copy(&dst, mmSetterSrc{Name: "x"}, WithMethodMapping())
+		err := Copy(mmSetterSrc{Name: "x"}, &dst).MethodMapping().Do()
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, ErrMethodReturnError))
 	})
@@ -114,12 +114,12 @@ func (d *mmSetterMismatchDst) Count(v string) { d.Stored = len(v) }
 func TestMethodMappingSetterMismatchSilentlySkipped(t *testing.T) {
 	var dst mmSetterMismatchDst
 	// src.Count 为 int，SetCount 接受 string：签名不符，静默跳过，不报错不误用
-	err := Copy(&dst, mmSetterMismatchSrc{Count: 5}, WithMethodMapping())
+	err := Copy(mmSetterMismatchSrc{Count: 5}, &dst).MethodMapping().Do()
 	assert.NoError(t, err)
 	assert.Equal(t, 0, dst.Stored)
 }
 
-// ============ 默认（不传 WithMethodMapping）方法绝不被调用 ============
+// ============ 默认（不传 MethodMapping）方法绝不被调用 ============
 
 type mmDefaultSrc struct {
 	Called *bool
@@ -137,7 +137,7 @@ func TestMethodMappingOffByDefault(t *testing.T) {
 		called := false
 		src := &mmDefaultSrc{Called: &called}
 		var dst mmDefaultDst
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.NoError(t, err)
 		assert.False(t, called)
 		assert.Equal(t, "", dst.Name)
@@ -147,7 +147,7 @@ func TestMethodMappingOffByDefault(t *testing.T) {
 		called := false
 		src := &mmDefaultSrc{Called: &called}
 		var dst mmDefaultDst
-		err := Copy(&dst, src, WithMethodMapping())
+		err := Copy(src, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.True(t, called)
 		assert.Equal(t, "x", dst.Name)
@@ -168,12 +168,12 @@ func (d *mmTonameDst) SetName(v string) { d.Stored = v }
 
 func TestMethodMappingWithToname(t *testing.T) {
 	var dst mmTonameDst
-	err := Copy(&dst, mmTonameSrc{Name: "toname"}, WithMethodMapping())
+	err := Copy(mmTonameSrc{Name: "toname"}, &dst).MethodMapping().Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "toname", dst.Stored)
 }
 
-// ============ 与 WithIgnoreEmpty 组合 ============
+// ============ 与 IgnoreEmpty 组合 ============
 
 type mmEmptySrc struct{ Name string }
 
@@ -193,14 +193,14 @@ func TestMethodMappingWithIgnoreEmpty(t *testing.T) {
 	t.Run("setter not called when src field zero", func(t *testing.T) {
 		// src.Name 为零值：调用前判空，setter 不触发，保留初始值
 		dst := mmEmptyDst{Stored: "keep"}
-		err := Copy(&dst, mmEmptySrc{}, WithMethodMapping(), WithIgnoreEmpty())
+		err := Copy(mmEmptySrc{}, &dst).MethodMapping().IgnoreEmpty().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "keep", dst.Stored)
 	})
 
 	t.Run("setter called when src field non-zero", func(t *testing.T) {
 		dst := mmEmptyDst{Stored: "keep"}
-		err := Copy(&dst, mmEmptySrc{Name: "v"}, WithMethodMapping(), WithIgnoreEmpty())
+		err := Copy(mmEmptySrc{Name: "v"}, &dst).MethodMapping().IgnoreEmpty().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "v", dst.Stored)
 	})
@@ -208,14 +208,14 @@ func TestMethodMappingWithIgnoreEmpty(t *testing.T) {
 	t.Run("getter zero return skipped", func(t *testing.T) {
 		// getter 返回零值：调用后判空，跳过写入，保留初始值
 		dst := mmEmptyGetterDst{Name: "keep"}
-		err := Copy(&dst, &mmEmptyGetterSrc{}, WithMethodMapping(), WithIgnoreEmpty())
+		err := Copy(&mmEmptyGetterSrc{}, &dst).MethodMapping().IgnoreEmpty().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "keep", dst.Name)
 	})
 
 	t.Run("getter zero return without IgnoreEmpty overwrites", func(t *testing.T) {
 		dst := mmEmptyGetterDst{Name: "keep"}
-		err := Copy(&dst, &mmEmptyGetterSrc{}, WithMethodMapping())
+		err := Copy(&mmEmptyGetterSrc{}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "", dst.Name)
 	})
@@ -234,15 +234,15 @@ type mmNestedDst struct{ Inner mmNestedInner }
 func TestMethodMappingNestedWithMaxDepth(t *testing.T) {
 	t.Run("nested getter result copied", func(t *testing.T) {
 		var dst mmNestedDst
-		err := Copy(&dst, &mmNestedSrc{}, WithMethodMapping())
+		err := Copy(&mmNestedSrc{}, &dst).MethodMapping().Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 42, dst.Inner.N)
 	})
 
 	t.Run("nested getter result respects max depth", func(t *testing.T) {
-		// getter 返回值经 deepCopyInner(depth+1) 写入，同样受 WithMaxDepth 约束
+		// getter 返回值经 deepCopyInner(depth+1) 写入，同样受 MaxDepth 约束
 		var dst mmNestedDst
-		err := Copy(&dst, &mmNestedSrc{}, WithMethodMapping(), WithMaxDepth(0))
+		err := Copy(&mmNestedSrc{}, &dst).MethodMapping().MaxDepth(0).Do()
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, ErrMaxDepthExceeded))
 	})
@@ -262,7 +262,7 @@ func (d *mmPriorityDst) SetName(v string) { d.Stored = "via-setter" }
 func TestMethodMappingFieldBeatsSetter(t *testing.T) {
 	// dst 有同名字段 Name：字段直接匹配，setter 不触发
 	var dst mmPriorityDst
-	err := Copy(&dst, mmPrioritySrc{Name: "direct"}, WithMethodMapping())
+	err := Copy(mmPrioritySrc{Name: "direct"}, &dst).MethodMapping().Do()
 	assert.NoError(t, err)
 	assert.Equal(t, "direct", dst.Name)
 	assert.Equal(t, "", dst.Stored)

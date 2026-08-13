@@ -1,6 +1,6 @@
 package copier
 
-// A+ 增强工作包覆盖率补充测试：覆盖 ToMap、WithTagName、错误路径与边界转换等缺口。
+// A+ 增强工作包覆盖率补充测试：覆盖 tag 系统、错误路径与边界转换等缺口。
 
 import (
 	"errors"
@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// ============ ToMap（copier.go 覆盖率缺口 0%） ============
+// ============ struct→map（v0.3 起经 Copy 链式入口） ============
 
-func TestToMap(t *testing.T) {
+func TestStructToMapEntry(t *testing.T) {
 	t.Run("struct to map equivalence with Copy", func(t *testing.T) {
 		type addrT struct {
 			City string
@@ -24,11 +24,11 @@ func TestToMap(t *testing.T) {
 
 		src := srcT{Name: "John", Age: 30, Address: addrT{City: "BJ"}}
 
-		m1, err := ToMap(src)
-		assert.NoError(t, err)
+		var m1 map[string]any
+		assert.NoError(t, Copy(src, &m1).Do())
 
 		var m2 map[string]any
-		assert.NoError(t, Copy(&m2, src))
+		assert.NoError(t, Copy(src, &m2).Do())
 		assert.Equal(t, m2, m1)
 		assert.Equal(t, "John", m1["Name"])
 		assert.Equal(t, map[string]any{"City": "BJ"}, m1["Address"])
@@ -40,8 +40,8 @@ func TestToMap(t *testing.T) {
 		}
 
 		src := srcT{Items: []int{1, 2, 3}}
-		m, err := ToMap(src)
-		assert.NoError(t, err)
+		var m map[string]any
+		assert.NoError(t, Copy(src, &m).Do())
 
 		// 深拷贝隔离：修改返回 map 的嵌套容器不影响 src
 		m["Items"].([]int)[0] = 999
@@ -55,8 +55,8 @@ func TestToMap(t *testing.T) {
 		}
 
 		src := srcT{Name: "John", Sex: "Male"}
-		m, err := ToMap(src, WithSkipFields("Sex"))
-		assert.NoError(t, err)
+		var m map[string]any
+		assert.NoError(t, Copy(src, &m).SkipFields("Sex").Do())
 
 		_, hasSex := m["Sex"]
 		assert.False(t, hasSex)
@@ -64,10 +64,10 @@ func TestToMap(t *testing.T) {
 	})
 }
 
-// ============ WithTagName（option.go 覆盖率缺口 0%） ============
+// ============ TagName（自定义标签名） ============
 // 同时覆盖 cpyStruct 的 tagSkip 分支与 toName 的 toname 分支。
 
-func TestWithTagName(t *testing.T) {
+func TestTagName(t *testing.T) {
 	type srcT struct {
 		Name string `json:"toname=nick"`
 		Age  int    `json:"-"`
@@ -81,14 +81,14 @@ func TestWithTagName(t *testing.T) {
 
 	t.Run("default copier tag ignores json tag", func(t *testing.T) {
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
-		assert.Equal(t, 30, dst.Age)   // 无 copier 标签，按字段名匹配
-		assert.Equal(t, "", dst.Nick)  // json 标签不作为 copier 标签来源
+		assert.NoError(t, Copy(src, &dst).Do())
+		assert.Equal(t, 30, dst.Age)  // 无 copier 标签，按字段名匹配
+		assert.Equal(t, "", dst.Nick) // json 标签不作为 copier 标签来源
 	})
 
-	t.Run("WithTagName json applies", func(t *testing.T) {
+	t.Run("TagName json applies", func(t *testing.T) {
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src, WithTagName("json")))
+		assert.NoError(t, Copy(src, &dst).TagName("json").Do())
 		assert.Equal(t, "John", dst.Nick) // toname=nick 生效
 		assert.Equal(t, 0, dst.Age)       // json:"-" 忽略该字段
 	})
@@ -103,7 +103,7 @@ func TestAuditAplusErrorPaths(t *testing.T) {
 		}
 		var dst dstT
 
-		err := Copy(&dst, []int{1, 2})
+		err := Copy([]int{1, 2}, &dst).Do()
 		assert.ErrorIs(t, err, ErrNotSupported)
 	})
 
@@ -113,7 +113,7 @@ func TestAuditAplusErrorPaths(t *testing.T) {
 		}
 		var dst dstT
 
-		err := Copy(&dst, map[int]string{1: "a"})
+		err := Copy(map[int]string{1: "a"}, &dst).Do()
 		assert.ErrorIs(t, err, ErrMapKeyNotMatch)
 	})
 }
@@ -131,7 +131,7 @@ func TestAuditAplusPointerEdges(t *testing.T) {
 
 		src := srcT{P: nil}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Nil(t, dst.P)
 	})
 
@@ -145,7 +145,7 @@ func TestAuditAplusPointerEdges(t *testing.T) {
 
 		src := srcT{P: nil}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Nil(t, dst.P)
 	})
 
@@ -159,7 +159,7 @@ func TestAuditAplusPointerEdges(t *testing.T) {
 
 		src := srcT{Data: nil}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Nil(t, dst.Data)
 	})
 
@@ -174,7 +174,7 @@ func TestAuditAplusPointerEdges(t *testing.T) {
 		n := 42
 		src := srcT{Data: &n}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 
 		got := dst.Data.(*int)
 		assert.Equal(t, 42, *got)
@@ -202,7 +202,7 @@ func TestAuditAplusInterfaceNarrowError(t *testing.T) {
 
 		src := srcT{Data: map[string]int{"a": 1}}
 		var dst dstT
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.Error(t, err)
 	})
 
@@ -216,7 +216,7 @@ func TestAuditAplusInterfaceNarrowError(t *testing.T) {
 
 		src := srcT{Data: []int{1}}
 		var dst dstT
-		err := Copy(&dst, src)
+		err := Copy(src, &dst).Do()
 		assert.Error(t, err)
 	})
 }
@@ -234,7 +234,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{B: []byte("hi")}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "hi", dst.B)
 	})
 
@@ -248,7 +248,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{N: 42}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "42", dst.N)
 	})
 
@@ -262,7 +262,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{N: 7}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "7", dst.N)
 	})
 
@@ -276,7 +276,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{F: 3.14}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "3.14", dst.F)
 	})
 
@@ -290,7 +290,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{F: "3.14"}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, 3.14, dst.F)
 	})
 
@@ -304,7 +304,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{N: "42"}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, uint(42), dst.N)
 	})
 
@@ -318,7 +318,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{B: false}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, uint(0), dst.B)
 	})
 
@@ -332,7 +332,7 @@ func TestAuditAplusDefaultConversions(t *testing.T) {
 
 		src := srcT{B: false}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, float64(0), dst.B)
 	})
 }
@@ -344,7 +344,7 @@ func TestAuditAplusMapValueEdges(t *testing.T) {
 		from := map[string]any{"arr": [3]int{1, 2, 3}}
 		to := map[string]any{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 		// 数组为值类型：to 中的数组与 from 相互独立（修改副本不影响 from）
 		arr := to["arr"].([3]int)
 		arr[0] = 999
@@ -357,7 +357,7 @@ func TestAuditAplusMapValueEdges(t *testing.T) {
 		to := map[string]any{}
 
 		assert.NotPanics(t, func() {
-			assert.NoError(t, Copy(&to, from))
+			assert.NoError(t, Copy(from, &to).Do())
 		})
 		assert.Nil(t, to["ptr"])
 	})
@@ -367,7 +367,7 @@ func TestAuditAplusMapValueEdges(t *testing.T) {
 		from := map[string]string{"a": "1"}
 		to := map[string]int{}
 
-		assert.NoError(t, Copy(&to, from, WithLenient()))
+		assert.NoError(t, Copy(from, &to).Lenient().Do())
 		assert.Equal(t, 0, to["a"]) // to 保持空
 	})
 }
@@ -379,7 +379,7 @@ func TestAuditAplusKeyType(t *testing.T) {
 		from := map[bool]int{true: 1}
 		to := map[string]int{}
 
-		err := Copy(&to, from)
+		err := Copy(from, &to).Do()
 		assert.ErrorIs(t, err, ErrInvalidCopyDestination)
 	})
 
@@ -387,7 +387,7 @@ func TestAuditAplusKeyType(t *testing.T) {
 		from := map[int]string{1: "a"}
 		to := map[int64]string{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 		assert.Equal(t, "a", to[1])
 	})
 
@@ -397,7 +397,7 @@ func TestAuditAplusKeyType(t *testing.T) {
 		from := map[MyString]int{"a": 1}
 		to := map[string]int{}
 
-		assert.NoError(t, Copy(&to, from))
+		assert.NoError(t, Copy(from, &to).Do())
 		assert.Equal(t, 1, to["a"])
 	})
 }
@@ -415,7 +415,7 @@ func TestAuditAplusIgnoreEmptyStruct(t *testing.T) {
 	src := srcT{Name: ""}
 	dst := dstT{Name: "preset"}
 
-	assert.NoError(t, Copy(&dst, src, WithIgnoreEmpty()))
+	assert.NoError(t, Copy(src, &dst).IgnoreEmpty().Do())
 	assert.Equal(t, "preset", dst.Name) // 空值被跳过，保留预设
 }
 
@@ -434,7 +434,7 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := parent{Name: "a", Child: child{Name: "b"}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -449,7 +449,7 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := parent{anonInner: anonInner{X: 1}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -461,7 +461,7 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := map[string]any{"Meta": map[string]any{"a": 1}}
 		var dst person
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -469,7 +469,7 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := map[string]any{"list": []any{map[string]any{"a": 1}}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -477,7 +477,7 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := map[string]any{"ptr": &auditPtrVal{Name: "x"}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -493,9 +493,9 @@ func TestAuditAplusMaxDepthPropagation(t *testing.T) {
 		src := srcT{Data: &n}
 		var dst dstT
 
-		// WithMaxDepth(1)：顶层 0 与字段递归 1 均未超限，进入 Interface case 后
+		// MaxDepth(1)：顶层 0 与字段递归 1 均未超限，进入 Interface case 后
 		// 指针深拷贝递归（depth+1=2）超限，验证 Interface 内部错误传播
-		err := Copy(&dst, src, WithMaxDepth(1))
+		err := Copy(src, &dst).MaxDepth(1).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 }
@@ -512,7 +512,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Name: "a", hidden: 1}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "a", dst["Name"])
 		_, hasHidden := dst["hidden"]
 		assert.False(t, hasHidden)
@@ -527,7 +527,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Name: "a", Age: 1}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, 1, dst["Age"])
 		_, hasName := dst["Name"]
 		assert.False(t, hasName)
@@ -545,7 +545,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Meta: map[string]int{"a": 1}, Ptr: &n, Arr: [2]int{1, 2}, Data: []int{9}}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 
 		// 修改 dst 的嵌套容器不影响 src
 		dst["Meta"].(map[string]int)["a"] = 999
@@ -567,7 +567,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Ptr: nil}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Nil(t, dst["Ptr"])
 	})
 
@@ -579,7 +579,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Data: "hello"}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Equal(t, "hello", dst["Data"])
 	})
 
@@ -591,7 +591,7 @@ func TestAuditAplusStructToMapEdges(t *testing.T) {
 		src := srcT{Items: []int{1}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 }
@@ -609,7 +609,7 @@ func TestAuditAplusInterfaceContainerEdges(t *testing.T) {
 
 		src := srcT{Data: []int{1, 2}}
 		var dst dstT
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 
 		dst.Data.([]int)[0] = 999
 		assert.Equal(t, 1, src.Data[0])
@@ -625,7 +625,7 @@ func TestAuditAplusInterfaceContainerEdges(t *testing.T) {
 
 		src := srcT{Data: map[string]int{"a": 1}}
 		var dst dstT
-		err := Copy(&dst, src, WithMaxDepth(1))
+		err := Copy(src, &dst).MaxDepth(1).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -639,7 +639,7 @@ func TestAuditAplusInterfaceContainerEdges(t *testing.T) {
 
 		src := srcT{Data: []int{1}}
 		var dst dstT
-		err := Copy(&dst, src, WithMaxDepth(1))
+		err := Copy(src, &dst).MaxDepth(1).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 }
@@ -657,7 +657,7 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{FieldName: "F", SrcType: "", Fn: nil}))
+		err := Copy(src, &dst).Converters(TypeConverter{FieldName: "F", SrcType: "", Fn: nil}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst["F"])
 	})
@@ -666,7 +666,7 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{FieldName: "Other", SrcType: "", DstType: int(0), Fn: toInt}))
+		err := Copy(src, &dst).Converters(TypeConverter{FieldName: "Other", SrcType: "", DstType: int(0), Fn: toInt}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst["F"])
 	})
@@ -676,7 +676,7 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{FieldName: "F", SrcType: int(0), DstType: int(0), Fn: toInt}))
+		err := Copy(src, &dst).Converters(TypeConverter{FieldName: "F", SrcType: int(0), DstType: int(0), Fn: toInt}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst["F"])
 	})
@@ -685,10 +685,10 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "F", SrcType: "", DstType: int(0),
 			Fn: func(src any) (any, error) { return nil, errors.New("boom") },
-		}))
+		}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst["F"])
 	})
@@ -697,10 +697,10 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcT{F: "x"}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "F", SrcType: "", DstType: int(0),
 			Fn: func(src any) (any, error) { return nil, nil },
-		}))
+		}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, "x", dst["F"])
 	})
@@ -713,14 +713,14 @@ func TestAuditAplusTypeConvertEdges(t *testing.T) {
 		src := srcI{N: 5}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithConverters(TypeConverter{
+		err := Copy(src, &dst).Converters(TypeConverter{
 			FieldName: "N",
 			SrcType:   int(0),
 			DstType:   int(0),
 			Fn: func(src any) (any, error) {
 				return int(src.(int64)) * 2, nil
 			},
-		}))
+		}).Do()
 		assert.NoError(t, err)
 		assert.Equal(t, 10, dst["N"])
 	})
@@ -737,7 +737,7 @@ func TestAuditAplusCopyContainerEdges(t *testing.T) {
 		src := srcT{Data: nil}
 		dst := map[string]any{}
 
-		assert.NoError(t, Copy(&dst, src))
+		assert.NoError(t, Copy(src, &dst).Do())
 		assert.Nil(t, dst["Data"])
 	})
 
@@ -749,7 +749,7 @@ func TestAuditAplusCopyContainerEdges(t *testing.T) {
 		src := srcT{Meta: map[string]int{"a": 1}}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 
@@ -762,7 +762,7 @@ func TestAuditAplusCopyContainerEdges(t *testing.T) {
 		src := srcT{Ptr: &n}
 		dst := map[string]any{}
 
-		err := Copy(&dst, src, WithMaxDepth(0))
+		err := Copy(src, &dst).MaxDepth(0).Do()
 		assert.ErrorIs(t, err, ErrMaxDepthExceeded)
 	})
 }
@@ -778,7 +778,7 @@ func TestAuditAplusParseFailures(t *testing.T) {
 
 		src := srcT{B: "notabool"}
 		dst := dstT{B: true}
-		assert.NoError(t, Copy(&dst, src, WithLenient()))
+		assert.NoError(t, Copy(src, &dst).Lenient().Do())
 		assert.Equal(t, true, dst.B) // ParseBool 失败，保持原值（宽松语义）
 	})
 }

@@ -10,7 +10,7 @@ type exampleUser struct {
 func ExampleCopy() {
 	src := exampleUser{Name: "John", Age: 30}
 	var dst exampleUser
-	if err := Copy(&dst, src); err != nil {
+	if err := Copy(src, &dst).Do(); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -25,7 +25,7 @@ func ExampleCopy_map() {
 		Age  int
 	}
 	var dst user
-	if err := Copy(&dst, src); err != nil {
+	if err := Copy(src, &dst).Do(); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -41,7 +41,7 @@ func ExampleCopy_options() {
 		Secret string
 	}
 	var dst user
-	if err := Copy(&dst, src, WithSkipFields("Secret")); err != nil {
+	if err := Copy(src, &dst).SkipFields("Secret").Do(); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -49,13 +49,15 @@ func ExampleCopy_options() {
 	// Output: secret=""
 }
 
-func ExampleToMap() {
+func ExampleCopy_structToMap() {
 	src := struct {
 		Name string
 		Age  int
 	}{Name: "John", Age: 30}
-	m, err := ToMap(src)
-	if err != nil {
+
+	// struct → map（跨类型走 Copy）
+	var m map[string]any
+	if err := Copy(src, &m).Do(); err != nil {
 		fmt.Println(err)
 		return
 	}

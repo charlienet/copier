@@ -17,20 +17,21 @@
 //
 // Copy 在字段级别支持自动类型转换（string↔int/uint/float/bool 等），由 reflect
 // 内置规则和 strconv 协同处理。如需自定义类型转换（如 string→time.Time），
-// 请使用 WithConverters 注册 TypeConverter。map 值的转换同样通过 TypeConvert 完成，
+// 请使用 .Converters() 注册 TypeConverter。map 值的转换同样通过 TypeConvert 完成，
 // 而非 valueConverter（后者专用于 struct 字段名级别转换）。
 //
 // # 循环引用
 //
 // Copy 在递归拷贝过程中会检测指针循环引用并安全终止，不会导致栈溢出。
-// 使用 WithMaxDepth 可限制最大递归深度，超限返回 ErrMaxDepthExceeded。
+// 使用 .MaxDepth() 可限制最大递归深度，超限返回 ErrMaxDepthExceeded。
 //
 // # 标签系统
 //
 // 结构体字段可通过 copier 标签控制拷贝行为：
-//   copier:"-"          忽略该字段
-//   copier:"must"       仅当启用 WithMust 时拷贝该字段
-//   copier:"toname=XXX" 拷贝到目标字段 XXX（可与 WithMust 组合使用）
+//
+//	copier:"-"          忽略该字段
+//	copier:"must"       仅当启用 MustFields 时拷贝该字段
+//	copier:"toname=XXX" 拷贝到目标字段 XXX（可与 MustFields 组合使用）
 //
 // # 并发安全
 //
@@ -43,7 +44,7 @@
 //   - map→map 的嵌套容器通过深拷贝隔离，但 map→map 路径不调用 valueConverter；
 //     如需 map 值级转换请使用 TypeConvert。
 //   - 无输入 map 大小的硬限制；极大 map 的拷贝由调用方自行评估内存风险。
-//     WithMaxDepth 可限制递归深度。
+//     MaxDepth 可限制递归深度。
 //
 // # 来源
 //
@@ -59,38 +60,6 @@ import (
 	"strings"
 	"time"
 )
-
-// ToMap 将任意类型 src 转换为 map[string]any。
-// 等价于 Copy(&result, src, opts...)，语义与 Copy 一致。
-// 嵌套容器被深拷贝，修改返回的 map 不会影响 src。
-func ToMap(src any, opts ...option) (map[string]any, error) {
-	var result map[string]any
-	err := Copy(&result, src, opts...)
-	return result, err
-}
-
-// Copy 将 src 的值深拷贝到 dst，支持 struct↔map↔slice 之间的互转。
-//
-// dst 必须是非 nil 的可寻址指针（如 &target），src 可以为值或指针。
-//
-// 拷贝遵循以下规则：
-//   - 同名字段/同 key 默认按名称匹配（大小写不敏感，可通过 WithCaseSensitive 开启敏感）
-//   - 可转换的基础类型自动转换（int↔string 等）
-//   - 嵌套容器（slice/map/pointer）递归深拷贝
-//   - 未匹配的字段/未导出的字段/不可设置的字段静默跳过
-//
-// 选项函数（With*）可控制：最大深度、忽略空值、大小写敏感、字段跳过、
-// 字段/值转换、标签名、must 模式等。详见包文档。
-//
-// 返回 error 的场景：
-//   - dst 不可寻址（非指针或 nil）
-//   - src 无效（nil 值）
-//   - map key 类型不兼容
-//   - 超出最大递归深度（WithMaxDepth）
-//   - 接口类型不满足时（窄接口赋值失败）
-func Copy(dst, src any, opts ...option) error {
-	return copier(dst, src, getOpt(opts...))
-}
 
 func copier(dst, src any, opt *options) error {
 	// 顶层 dst 为 nil 指针链时自动分配（对齐 deepCopyInner Pointer 分支自动 New 语义）：
@@ -168,7 +137,7 @@ func deepCopy(dst, src reflect.Value, depth int, opt *options) error {
 }
 
 func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[uintptr]bool) error {
-	// 深度限制统一在递归入口执行，struct->map 路径同样受 WithMaxDepth 约束
+	// 深度限制统一在递归入口执行，struct->map 路径同样受 MaxDepth 约束
 	if opt.ExceedMaxDepth(depth) {
 		return ErrMaxDepthExceeded
 	}

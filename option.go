@@ -24,30 +24,11 @@ type options struct {
 	nilSrcZero       bool                  // nil 源视为零值目标（默认关闭，nil 源报错）
 }
 
-// Option 复制选项函数（函数式选项模式）。
-// 导出后外部封装可声明 ...copier.Option 形参并透传 With* 选项。
-// 注：参数类型 *options 未导出，外部无法自行构造选项，只能使用 With* 工厂。
-type Option = func(*options)
-
-// option 内部别名，保持既有代码与签名不变。
-type option = Option
-
 type TypeConverter struct {
 	FieldName string
 	SrcType   any
 	DstType   any
 	Fn        func(src any) (dst any, err error)
-}
-
-func getOpt(opts ...option) *options {
-	// 复制 DefaultOptions 避免测试间状态污染
-	opt := *DefaultOptions
-
-	for _, o := range opts {
-		o(&opt)
-	}
-
-	return &opt
 }
 
 func (opt *options) NameConvert(name string) string {
@@ -121,98 +102,6 @@ func (opt *options) ExceedMaxDepth(depth int) bool {
 
 func (opt *options) isSkipField(fieldName string) bool {
 	return slices.Contains(opt.skipFields, fieldName)
-}
-
-func WithMaxDepth(depth int) option {
-	return func(o *options) {
-		o.maxDepth = depth
-	}
-}
-
-func WithIgnoreEmpty() option {
-	return func(o *options) {
-		o.ignoreEmpty = true
-	}
-}
-
-func WithCaseSensitive() option {
-	return func(o *options) {
-		o.caseSensitive = true
-	}
-}
-
-func WithMust() option {
-	return func(o *options) {
-		o.must = true
-	}
-}
-
-func WithConverters(converters ...TypeConverter) option {
-	return func(o *options) {
-		o.converters = converters
-	}
-}
-
-func WithNameMapping(mappings map[string]string) option {
-	return func(o *options) {
-		o.fieldNameMapping = mappings
-	}
-}
-
-func WithNameFn(fn func(string) string) option {
-	return func(o *options) {
-		o.nameConverter = fn
-	}
-}
-
-func WithTagName(tagName string) option {
-	return func(o *options) {
-		o.tagName = tagName
-	}
-}
-
-func WithSkipFields(fields ...string) option {
-	return func(o *options) {
-		o.skipFields = fields
-	}
-}
-
-func WithValueConverter(fn func(string, any) any) option {
-	return func(o *options) {
-		o.valueConverter = fn
-	}
-}
-
-// WithMethodMapping 启用方法→字段映射。默认关闭以保持向后兼容与性能。
-func WithMethodMapping() option {
-	return func(o *options) {
-		o.methodMapping = true
-	}
-}
-
-// WithStrict 启用严格模式：strconv 解析失败或值类型不兼容时返回
-// ErrConversionFailed 哨兵错误，而非静默跳过/留零值。v0.2 起默认开启。
-// 注：strict 不影响字段匹配 plan（与 ignoreEmpty 同类，运行时判断）。
-func WithStrict() option {
-	return func(o *options) {
-		o.strict = true
-	}
-}
-
-// WithLenient 显式退出严格模式：转换失败恢复静默跳过/留零值语义。
-// 与 WithStrict 相对，用于局部恢复 v0.1 的宽松行为。
-func WithLenient() option {
-	return func(o *options) {
-		o.strict = false
-	}
-}
-
-// WithNilSrcZero 将 nil 源视为零值目标：Copy(&dst, nil) 时把 dst 置零并返回 nil，
-// 而非 ErrInvalidCopyFrom。默认关闭（nil 源报错）。与 strict 正交，不受其影响。
-func WithNilSrcZero() option {
-	return func(o *options) {
-		o.nilSrcZero = true
-	}
 }
 
 var DefaultOptions = &options{

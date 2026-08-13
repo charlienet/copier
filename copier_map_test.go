@@ -15,7 +15,7 @@ func TestAnyMap(t *testing.T) {
 
 	var m2 map[string]any
 
-	err := Copy(&m2, &m1)
+	err := Copy(&m1, &m2).Do()
 	assert.NoError(t, err)
 	assert.NotNil(t, m2)
 	assert.Equal(t, m1, m2)
@@ -30,7 +30,7 @@ func TestValueMap(t *testing.T) {
 
 	m2 := map[string]any{}
 
-	Copy(&m2, &m1)
+	Copy(&m1, &m2).Do()
 
 	t.Logf("%+v", m2)
 }
@@ -42,7 +42,7 @@ func TestKeyIntMap(t *testing.T) {
 
 	m2 := map[int]any{}
 
-	Copy(&m2, &m1)
+	Copy(&m1, &m2).Do()
 
 	t.Logf("%+v", m2)
 }
@@ -52,11 +52,11 @@ func TestStructToMap(t *testing.T) {
 
 	m := map[string]any{}
 
-	assert.NoError(t, Copy(&m, &src))
+	assert.NoError(t, Copy(&src, &m).Do())
 
 	dst := map[string]any{}
 
-	assert.NoError(t, Copy(&dst, &src, WithIgnoreEmpty()))
+	assert.NoError(t, Copy(&src, &dst).IgnoreEmpty().Do())
 	assert.Equal(t, dst["Name"], "John")
 
 	t.Logf("%+v", dst)
@@ -79,7 +79,7 @@ func TestEmbeddedStruct(t *testing.T) {
 
 	dst := map[string]any{}
 
-	assert.NoError(t, Copy(&dst, &src))
+	assert.NoError(t, Copy(&src, &dst).Do())
 	assert.Equal(t, dst["Name"], "John")
 	assert.Equal(t, dst["Age"], 30)
 
@@ -95,6 +95,6 @@ func TestMapToStruct(t *testing.T) {
 
 	var p Person
 
-	assert.NoError(t, Copy(&p, &m))
+	assert.NoError(t, Copy(&m, &p).Do())
 	t.Logf("%+v", p)
 }
