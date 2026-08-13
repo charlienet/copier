@@ -284,8 +284,13 @@ got, err := copier.Clone(src).With(&copier.Config{MaxDepth: 3, NilSrcZero: true}
 `nil` config is a no-op. `With` composes with chain methods in any order (later
 settings win at execution time). Field rules: strings apply when non-empty,
 `MaxDepth` when non-zero, bools when `true` (e.g. `Lenient: true` opts out of
-strict mode), and slices / maps / funcs when non-nil. `Lenient()` once enabled
-cannot be turned off again via `Config` or chain methods.
+strict mode, `Strict: true` opts back in — when both are set, `Strict` wins),
+and slices / maps / funcs when non-nil. Once `Lenient()` is enabled you can
+re-enable strict mode with `Strict()` or `Config.Strict` (and vice versa).
+`AllowPrecisionLoss: true` narrows strict mode to exempt only numeric
+precision-loss checks. Note the `MaxDepth` semantics differ deliberately:
+`Config.MaxDepth: 0` means "not set" (keep the current behavior), while the
+chain method `MaxDepth(0)` actively rejects any nested copy.
 
 ## Copy Semantics
 
@@ -344,6 +349,8 @@ with `CaseSensitive()`).
 | Method | Signature | Description |
 |---|---|---|
 | `Lenient()` | `*Copier[S, D]` | Opt out of strict mode: invalid conversions are skipped instead of erroring. |
+| `Strict()` | `*Copier[S, D]` | Opt back into strict mode (on by default since v0.2); the inverse of `Lenient()`. |
+| `AllowPrecisionLoss()` | `*Copier[S, D]` | Under strict mode, exempt numeric precision-loss checks (float→int truncation/overflow, float64→float32 rounding, int→float out of range) — parse failures and type mismatches still error. |
 | `IgnoreEmpty()` | `*Copier[S, D]` | Skip fields whose (converted) value is the zero value. |
 | `CaseSensitive()` | `*Copier[S, D]` | Match field names case-sensitively. |
 | `MustFields()` | `*Copier[S, D]` | Copy only fields tagged `copier:"must"`. |
@@ -416,6 +423,19 @@ errors.Is(err, copier.ErrInvalidCopyFrom) // true
 > "not converted" (silently skipped) and does not produce an error, even in
 > strict mode.
 
+Field-level copy failures are wrapped in a `FieldPathError{Field, Err}` — its
+`Error()` output is byte-identical to the previous `"field: err"` format, and
+`Unwrap()` keeps the chain working with `errors.Is`. Use `errors.As` to extract
+the field path; nested structs produce one `FieldPathError` per level (outer
+fields first):
+
+```go
+var fpe *copier.FieldPathError
+if errors.As(err, &fpe) {
+	fmt.Println(fpe.Field) // the failing field, e.g. "N"
+}
+```
+
 ## Performance
 
 Same-type struct → struct (10 mixed-type fields), deep copy with per-iteration fresh
@@ -461,7 +481,9 @@ names must match exactly.
 ### Numeric truncation
 
 The lenient mode silently truncates float → int (3.9 → 3). Under strict mode (default
-since v0.2), precision loss returns `ErrConversionFailed` instead.
+since v0.2), precision loss returns `ErrConversionFailed` instead. For a middle
+ground, `AllowPrecisionLoss()` (or `Config.AllowPrecisionLoss`) exempts only
+numeric precision checks while keeping other strict errors.
 
 ### Silent skipping
 

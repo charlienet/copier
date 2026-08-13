@@ -279,7 +279,7 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 
 			if sf.Anonymous && sf.Type.Kind() == reflect.Struct {
 				if err := deepCopyInner(dst, src.Field(i), depth+1, opt, visited); err != nil {
-					return fmt.Errorf("%s: %w", sf.Name, err)
+					return &FieldPathError{Field: sf.Name, Err: err}
 				}
 
 				continue
@@ -305,14 +305,14 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 			if !converted && value.Kind() == reflect.Struct {
 				newDst := reflect.ValueOf(make(map[string]any, src.Field(i).NumField()))
 				if err := deepCopyInner(newDst, value, depth+1, opt, visited); err != nil {
-					return fmt.Errorf("%s: %w", name, err)
+					return &FieldPathError{Field: name, Err: err}
 				}
 
 				dst.SetMapIndex(reflect.ValueOf(name), newDst)
 			} else if !converted && isContainerKind(value.Kind()) {
 				copied, err := copyContainer(value, depth, opt, visited)
 				if err != nil {
-					return fmt.Errorf("%s: %w", name, err)
+					return &FieldPathError{Field: name, Err: err}
 				}
 
 				dst.SetMapIndex(reflect.ValueOf(name), copied)
@@ -373,7 +373,7 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 				}
 
 				if err := deepCopyInner(tv, v, depth+1, opt, visited); err != nil {
-					return fmt.Errorf("%s: %w", name, err)
+					return &FieldPathError{Field: name, Err: err}
 				}
 			}
 			return nil
@@ -503,8 +503,9 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 		if src.Type().AssignableTo(dst.Type()) ||
 			(!isNumericStringCross(src.Type(), dst.Type()) && src.Type().ConvertibleTo(dst.Type())) {
 			// 严格模式：数值转换精度丢失检测（float→int 截断/溢出、float64→float32 舍入、
-			// int→float 超精确范围），默认宽松模式零变化
-			if opt.strict && !losslessNumericConversion(src, dst) {
+			// int→float 超精确范围），默认宽松模式零变化。
+			// AllowPrecisionLoss 仅豁免本精度检查，字符串解析失败/类型不匹配仍报错
+			if opt.strict && !opt.allowPrecisionLoss && !losslessNumericConversion(src, dst) {
 				return fmt.Errorf("%w: precision loss converting %v(%v) to %v", ErrConversionFailed, src.Type(), src.Interface(), dst.Type())
 			}
 			dst.Set(src.Convert(dst.Type()))
@@ -700,7 +701,7 @@ func cpyStruct(dst, src reflect.Value, depth int, opt *options, visited map[uint
 		}
 
 		if err := deepCopyInner(dstValue, sField, depth+1, opt, visited); err != nil {
-			return fmt.Errorf("%s: %w", sf.Name, err)
+			return &FieldPathError{Field: sf.Name, Err: err}
 		}
 	}
 
@@ -772,7 +773,7 @@ func cpyStructByPlan(dst, src reflect.Value, plan *structPlan, depth int, opt *o
 		}
 
 		if err := deepCopyInner(dstValue, sField, depth+1, opt, visited); err != nil {
-			return fmt.Errorf("%s: %w", m.srcName, err)
+			return &FieldPathError{Field: m.srcName, Err: err}
 		}
 	}
 
@@ -796,7 +797,7 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 		if e.expand {
 			// 匿名 struct 字段：递归展开
 			if err := deepCopyInner(dst, src.Field(e.srcIdx), depth+1, opt, visited); err != nil {
-				return fmt.Errorf("%s: %w", e.srcName, err)
+				return &FieldPathError{Field: e.srcName, Err: err}
 			}
 			continue
 		}
@@ -821,14 +822,14 @@ func cpyStructToMap(dst, src reflect.Value, plan *structToMapPlan, depth int, op
 		if !converted && value.Kind() == reflect.Struct {
 			newDst := reflect.ValueOf(make(map[string]any, srcField.NumField()))
 			if err := deepCopyInner(newDst, value, depth+1, opt, visited); err != nil {
-				return fmt.Errorf("%s: %w", e.srcName, err)
+				return &FieldPathError{Field: e.srcName, Err: err}
 			}
 
 			dst.SetMapIndex(reflect.ValueOf(e.name), newDst)
 		} else if !converted && isContainerKind(value.Kind()) {
 			copied, err := copyContainer(value, depth, opt, visited)
 			if err != nil {
-				return fmt.Errorf("%s: %w", e.srcName, err)
+				return &FieldPathError{Field: e.srcName, Err: err}
 			}
 
 			dst.SetMapIndex(reflect.ValueOf(e.name), copied)
@@ -897,7 +898,7 @@ func cpyMapToStruct(dst, src reflect.Value, plan *mapToStructPlan, depth int, op
 		}
 
 		if err := deepCopyInner(tv, v, depth+1, opt, visited); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+			return &FieldPathError{Field: name, Err: err}
 		}
 	}
 

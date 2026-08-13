@@ -9,19 +9,20 @@ const (
 )
 
 type options struct {
-	tagName          string                // 标签名
-	maxDepth         int                   // 最大复制深度
-	ignoreEmpty      bool                  // 复制时忽略空字段
-	caseSensitive    bool                  // 复制时大小写敏感
-	must             bool                  // 只复制具有must标识的字段
-	converters       []TypeConverter       // 类型转换器
-	fieldNameMapping map[string]string     // 字段名转映射
-	nameConverter    func(string) string   // 字段名转换器
-	skipFields       []string              // 跳过的字段列表
-	valueConverter   func(string, any) any // 值转换函数
-	methodMapping    bool                  // 启用方法→字段映射（默认关闭）
-	strict           bool                  // 严格模式：转换失败报错而非静默留零/跳过（v0.2 起默认开启）
-	nilSrcZero       bool                  // nil 源视为零值目标（默认关闭，nil 源报错）
+	tagName            string                // 标签名
+	maxDepth           int                   // 最大复制深度
+	ignoreEmpty        bool                  // 复制时忽略空字段
+	caseSensitive      bool                  // 复制时大小写敏感
+	must               bool                  // 只复制具有must标识的字段
+	converters         []TypeConverter       // 类型转换器
+	fieldNameMapping   map[string]string     // 字段名转映射
+	nameConverter      func(string) string   // 字段名转换器
+	skipFields         []string              // 跳过的字段列表
+	valueConverter     func(string, any) any // 值转换函数
+	methodMapping      bool                  // 启用方法→字段映射（默认关闭）
+	strict             bool                  // 严格模式：转换失败报错而非静默留零/跳过（v0.2 起默认开启）
+	allowPrecisionLoss bool                  // 严格模式下豁免数值精度损失检查（仅精度类，解析失败/类型不匹配仍报错）
+	nilSrcZero         bool                  // nil 源视为零值目标（默认关闭，nil 源报错）
 }
 
 type TypeConverter struct {

@@ -62,6 +62,22 @@ func (c *Copier[S, D]) Lenient() *Copier[S, D] {
 	return c
 }
 
+// Strict 显式开启严格模式：转换失败报错而非静默留零/跳过（v0.2 起默认已开启）。
+// 与 Lenient() 互逆：Lenient() 之后再 Strict() 可恢复严格（双向闭环）。
+func (c *Copier[S, D]) Strict() *Copier[S, D] {
+	c.opts.strict = true
+	return c
+}
+
+// AllowPrecisionLoss 严格模式下豁免数值精度损失检查（float→int 截断/溢出、
+// float64→float32 舍入、int→float 超精确范围）。
+// 仅豁免精度类转换失败；字符串解析失败/类型不匹配等仍报错
+// （与 Lenient() 不同，后者关闭整个严格模式）。
+func (c *Copier[S, D]) AllowPrecisionLoss() *Copier[S, D] {
+	c.opts.allowPrecisionLoss = true
+	return c
+}
+
 // IgnoreEmpty 跳过零值字段。
 func (c *Copier[S, D]) IgnoreEmpty() *Copier[S, D] {
 	c.opts.ignoreEmpty = true
