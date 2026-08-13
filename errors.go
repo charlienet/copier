@@ -7,7 +7,7 @@ var (
 	ErrInvalidCopyFrom        = errors.New("copier: source must be non-nil")
 	ErrMapKeyNotMatch         = errors.New("copier: map key is not a string")
 	ErrNotSupported           = errors.New("copier: type combination not supported")
-	ErrMaxDepthExceeded       = errors.New("max copy depth exceeded")
+	ErrMaxDepthExceeded       = errors.New("copier: max copy depth exceeded")
 	ErrMethodReturnError      = errors.New("copier: method returned error")
 	ErrConversionFailed       = errors.New("copier: value conversion failed")
 )

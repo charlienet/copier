@@ -64,3 +64,51 @@ func ExampleCopy_structToMap() {
 	fmt.Printf("age=%d", m["Age"].(int))
 	// Output: age=30
 }
+
+func ExampleClone() {
+	src := exampleUser{Name: "John", Age: 30}
+
+	// 同型深拷贝：Result() 返回新值 + error
+	got, err := Clone(src).Result()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("%s is %d years old", got.Name, got.Age)
+	// Output: John is 30 years old
+}
+
+func ExampleClone_options() {
+	type user struct {
+		Name string
+		Meta map[string]string // 零值（nil map）：IgnoreEmpty 跳过，保持 nil
+	}
+	src := user{Name: "John"}
+
+	// Clone 返回 builder 可链式带选项，终端用 Result()
+	got, err := Clone(src).IgnoreEmpty().Result()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("meta_is_nil=%v", got.Meta == nil)
+	// Output: meta_is_nil=true
+}
+
+func ExampleCopy_withConfig() {
+	src := map[string]any{"Name": "John", "Age": 30, "Secret": "x"}
+	type user struct {
+		Name   string
+		Age    int
+		Secret string
+	}
+	var dst user
+
+	// With(&Config{...}) 一次性应用非零字段配置
+	if err := Copy(src, &dst).With(&Config{SkipFields: []string{"Secret"}}).Do(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("secret=%q", dst.Secret)
+	// Output: secret=""
+}
