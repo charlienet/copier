@@ -269,46 +269,38 @@ func TestCopyDoReuse(t *testing.T) {
 	assert.Equal(t, "n", dst.Name)
 }
 
-// ============ e2) Must() 终端：正常路径 + panic 路径 ============
+// ============ e2) 终端错误处理：正常路径 + 错误路径 + Lenient 恢复 ============
 
-func TestCopyMust(t *testing.T) {
-	t.Run("normal path fills dst", func(t *testing.T) {
+func TestCopyErrorHandling(t *testing.T) {
+	t.Run("normal path fills dst with no error", func(t *testing.T) {
 		src := chSrc{Name: "n", Age: 1}
 		var dst chDst
 
-		Copy(src, &dst).Must() // 不返回错误，直接填充
+		err := Copy(src, &dst).Do()
+		assert.NoError(t, err)
 		assert.Equal(t, "n", dst.Name)
 		assert.Equal(t, 1, dst.Age)
 	})
 
-	t.Run("panic on error (strict parse failure)", func(t *testing.T) {
-		type s struct{ Num string }
-		type d struct{ Num int }
-		src := s{Num: "abc"}
-
-		panicked := false
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					panicked = true
-					err, ok := r.(error)
-					assert.True(t, ok, "panic 值应为 error")
-					assert.True(t, errors.Is(err, ErrConversionFailed))
-				}
-			}()
-			var dst d
-			Copy(src, &dst).Must()
-		}()
-		assert.True(t, panicked)
-	})
-
-	t.Run("Lenient().Must() does not panic", func(t *testing.T) {
+	t.Run("error on strict parse failure", func(t *testing.T) {
 		type s struct{ Num string }
 		type d struct{ Num int }
 		src := s{Num: "abc"}
 
 		var dst d
-		Copy(src, &dst).Lenient().Must() // 宽松模式解析失败静默，不 panic
+		err := Copy(src, &dst).Do()
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrConversionFailed))
+	})
+
+	t.Run("Lenient().Do() succeeds", func(t *testing.T) {
+		type s struct{ Num string }
+		type d struct{ Num int }
+		src := s{Num: "abc"}
+
+		var dst d
+		err := Copy(src, &dst).Lenient().Do() // 宽松模式解析失败静默，不报错
+		assert.NoError(t, err)
 		assert.Equal(t, 0, dst.Num)
 	})
 }

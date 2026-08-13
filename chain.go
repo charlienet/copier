@@ -1,7 +1,7 @@
 package copier
 
 // Copier 泛型链式拷贝构建器：将 src 深拷贝到 dst，支持链式配置选项。
-// 通过 Copy 创建，以 Do() / Must() 执行。字段未导出，只能链式修改。
+// 通过 Copy / Clone 创建，以 Do() / Result() 执行。字段未导出，只能链式修改。
 // S=源类型，D=目标类型，由 Copy 调用参数自动推导。
 // 注意：本包声明的 Copy 遮蔽内置 copy 函数；包内无内置 copy 使用点，
 // 新增代码请勿使用内置 copy（用 slices.Clone 等替代）。
@@ -25,15 +25,34 @@ func Copy[S, D any](src S, dst *D) *Copier[S, D] {
 
 // Do 执行深拷贝，内部复用 copier 内核（plan 缓存兼容）。
 // Do 不修改构建器状态，同一 Copier 实例可重复调用。
+// Clone 入口请以 Result() 终结。
 func (c *Copier[S, D]) Do() error {
 	return copier(c.dst, c.src, &c.opts)
 }
 
-// Must 执行深拷贝，出错时 panic(err)。用于"确定不会失败"的填充已有场景。
-func (c *Copier[S, D]) Must() {
-	if err := c.Do(); err != nil {
-		panic(err)
+// Result 执行深拷贝并返回分配结果：成功返回 *c.dst（D 值），失败返回零值 + err。
+// 内部复用 copier 内核，错误语义与 Do() 完全一致（失败时返回 D 零值与 error，
+// 与 v0.3 的 Clone 语义相同）。
+// D 为指针类型时（如 Clone[*Foo] 的 D=*Foo），成功返回新分配的指针（非 nil）。
+// 对 Copy 入口创建的 builder 调用 Result() 返回 *c.dst 的值
+// （与 dst 共享引用字段底层，非深拷贝；无害）。
+func (c *Copier[S, D]) Result() (D, error) {
+	if err := copier(c.dst, c.src, &c.opts); err != nil {
+		var zero D
+		return zero, err
 	}
+	return *c.dst, nil
+}
+
+// With 一次性应用 Config 中的非零字段配置（零值字段保持当前配置不变）。
+// nil cfg 为 no-op（返回 c）。可与链式方法混用；With 立即应用非零字段，
+// 零值字段不构成"设置"（不覆盖）。对同一选项，后设置者生效。
+func (c *Copier[S, D]) With(cfg *Config) *Copier[S, D] {
+	if cfg == nil {
+		return c
+	}
+	cfg.apply(&c.opts)
+	return c
 }
 
 // Lenient 显式退出严格模式：转换失败恢复静默跳过/留零值语义。
@@ -55,7 +74,6 @@ func (c *Copier[S, D]) CaseSensitive() *Copier[S, D] {
 }
 
 // MustFields 只拷贝带 copier:"must" 标签的字段。
-// 命名为 MustFields 避免与泛型 Must* 变体语义混淆。
 func (c *Copier[S, D]) MustFields() *Copier[S, D] {
 	c.opts.must = true
 	return c

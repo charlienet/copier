@@ -58,8 +58,9 @@ func TestNilSrcZero(t *testing.T) {
 	})
 
 	t.Run("generic Clone keeps ErrInvalidCopyFrom for nil src", func(t *testing.T) {
-		// Clone 不接收选项：nil 源仍走默认 nilSrcZero=false 语义
-		_, err := Clone[any](nil)
+		// Clone 返回 builder，默认无选项：nil 源仍走默认 nilSrcZero=false 语义
+		// （如需改为置零可链式 .With(&Config{NilSrcZero: true}).Result()）
+		_, err := Clone[any](nil).Result()
 		assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
 	})
 }

@@ -124,22 +124,14 @@ func TestStrictWithPlanCache(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrConversionFailed))
 }
 
-// ============ 链式 Must() 终端在 strict 模式下 panic(ErrConversionFailed) ============
+// ============ 终端执行在 strict 模式下返回 ErrConversionFailed（无 panic 终端） ============
 
-func TestStrictMustPanic(t *testing.T) {
-	panicked := false
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-				err, ok := r.(error)
-				assert.True(t, ok, "panic 值应为 error")
-				assert.True(t, errors.Is(err, ErrConversionFailed))
-			}
-		}()
-		// 默认 strict：解析失败 → Copy(src, &dst).Must() panic(ErrConversionFailed)
-		var dst strictDst
-		Copy(strictSrc{Num: "abc"}, &dst).Must()
-	}()
-	assert.True(t, panicked)
+func TestStrictTerminalError(t *testing.T) {
+	// 默认 strict：解析失败 → Do() 返回 ErrConversionFailed
+	// （库不提供 Must() panic 终端，错误统一由 Do()/Result() 返回，调用方自行处理）
+	src := strictSrc{Num: "abc"}
+	var dst strictDst
+	err := Copy(src, &dst).Do()
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrConversionFailed))
 }

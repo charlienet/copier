@@ -1,6 +1,6 @@
 package copier
 
-// 泛型 API 测试：Clone 同类型深拷贝；跨类型走 Copy；panic 统一到 Copy(...).Must()
+// 泛型 API 测试：Clone 同类型深拷贝；跨类型走 Copy；错误统一由 Do()/Result() 返回
 // Clone[T] 同类型深拷贝；跨类型（含 struct→map）走 Copy。
 
 import (
@@ -29,7 +29,7 @@ func TestGenericCloneSameTypeStruct(t *testing.T) {
 		Meta:  map[string]string{"k": "v"},
 	}
 
-	got, err := Clone[gCloneSrc](src)
+	got, err := Clone[gCloneSrc](src).Result()
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -48,7 +48,7 @@ func TestGenericCloneSameTypePointer(t *testing.T) {
 	t.Run("valid pointer deep copied", func(t *testing.T) {
 		p := &gCloneSrc{Name: "x", Items: []int{1}}
 
-		got, err := Clone[*gCloneSrc](p)
+		got, err := Clone[*gCloneSrc](p).Result()
 		assert.NoError(t, err)
 		assert.NotNil(t, got)
 		assert.Equal(t, "x", got.Name)
@@ -60,7 +60,7 @@ func TestGenericCloneSameTypePointer(t *testing.T) {
 	t.Run("nil pointer returns ErrInvalidCopyFrom", func(t *testing.T) {
 		var p *gCloneSrc
 
-		got, err := Clone[*gCloneSrc](p)
+		got, err := Clone[*gCloneSrc](p).Result()
 		assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
 		assert.Nil(t, got) // 出错时返回 D 零值（nil 指针）
 	})
@@ -71,7 +71,7 @@ func TestGenericCloneSameTypePointer(t *testing.T) {
 func TestGenericCloneSameTypeMap(t *testing.T) {
 	src := map[string]any{"a": 1, "b": []int{1, 2}}
 
-	got, err := Clone[map[string]any](src)
+	got, err := Clone[map[string]any](src).Result()
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -83,7 +83,7 @@ func TestGenericCloneSameTypeMap(t *testing.T) {
 func TestGenericCloneSameTypeSlice(t *testing.T) {
 	src := []int{1, 2, 3}
 
-	got, err := Clone[[]int](src)
+	got, err := Clone[[]int](src).Result()
 	assert.NoError(t, err)
 	assert.Equal(t, src, got)
 
@@ -91,24 +91,12 @@ func TestGenericCloneSameTypeSlice(t *testing.T) {
 	assert.Equal(t, 1, src[0])
 }
 
-// panic 语义统一到 Copy(...).Must() 终端：
-// nil 源场景经 Copy[any](nil, &dst).Must() panic(ErrInvalidCopyFrom)。
-func TestGenericMustPanicOnNilSrc(t *testing.T) {
-	panicked := false
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-				err, ok := r.(error)
-				assert.True(t, ok, "panic 值应为 error")
-				assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
-			}
-		}()
-		// src=nil（S=any）→ from.IsValid()==false → ErrInvalidCopyFrom → Must() panic
-		var dst any
-		Copy[any](nil, &dst).Must()
-	}()
-	assert.True(t, panicked)
+// nil 源场景经 Copy[any](nil, &dst).Do() 返回 ErrInvalidCopyFrom：
+// 库不提供 Must() panic 终端，错误统一由 Do()/Result() 返回，调用方自行处理。
+func TestGenericNilSrcError(t *testing.T) {
+	var dst any
+	err := Copy[any](nil, &dst).Do()
+	assert.True(t, errors.Is(err, ErrInvalidCopyFrom))
 }
 
 // ============ Convert：跨类型 struct → struct ============
