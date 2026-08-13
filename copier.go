@@ -193,10 +193,10 @@ func deepCopyInner(dst, src reflect.Value, depth int, opt *options, visited map[
 					k = reflect.ValueOf(opt.NameConvert(k.String()))
 				}
 
-				// 4) value 类型兼容：不可转换则跳过（严格模式下报错）
+				// 4) value 类型兼容：不可转换则跳过（严格模式下报错，带 map key 定位）
 				if !v.Type().ConvertibleTo(dst.Type().Elem()) {
 					if opt.strict {
-						return fmt.Errorf("%w: cannot convert %v to %v", ErrConversionFailed, v.Type(), dst.Type().Elem())
+						return &FieldPathError{Field: fieldName, Err: fmt.Errorf("%w: cannot convert %v to %v", ErrConversionFailed, v.Type(), dst.Type().Elem())}
 					}
 					continue
 				}
